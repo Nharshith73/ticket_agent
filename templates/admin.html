@@ -87,9 +87,39 @@
   </header>
 
   <main class="layout">
-    <!-- Add/Update Member Form -->
-    <section class="panel">
-      <div class="panel-title"><h2>Add Team Member</h2></div>
+    <!-- Left Column: Settings Forms -->
+    <div style="display:flex; flex-direction:column; gap:20px;">
+      <!-- Jira Integration Credentials Form -->
+      <section class="panel">
+        <div class="panel-title" style="display:flex; justify-content:space-between; align-items:center;">
+          <h2>Jira Workspace Connection</h2>
+          <span id="jira-status-badge" class="badge" style="font-size:.68rem;">Checking…</span>
+        </div>
+        <form id="jira-config-form">
+          <div class="field">
+            <label for="jira_url">Jira Domain URL</label>
+            <input type="url" id="jira_url" required placeholder="https://yourdomain.atlassian.net">
+          </div>
+          <div class="field">
+            <label for="project_key">Jira Project Key</label>
+            <input type="text" id="project_key" required placeholder="e.g. KAN or FA" style="text-transform:uppercase;">
+          </div>
+          <div class="field">
+            <label for="user_email">Jira Account Email</label>
+            <input type="email" id="user_email" required placeholder="you@domain.com">
+          </div>
+          <div class="field">
+            <label for="api_token">Atlassian API Token</label>
+            <input type="password" id="api_token" required placeholder="Paste Atlassian API Token">
+          </div>
+          <button type="submit" class="btn-primary" id="save-jira-btn">Connect & Test Jira Connection</button>
+        </form>
+        <div class="status-msg" id="jira-status-msg"></div>
+      </section>
+
+      <!-- Add/Update Member Form -->
+      <section class="panel">
+        <div class="panel-title"><h2>Add Team Member</h2></div>
       <form id="member-form">
         <div class="field">
           <label for="name">Full Name</label>
@@ -130,8 +160,9 @@
         </a>
       </div>
     </section>
+  </div>
 
-    <!-- Team Roster Table -->
+  <!-- Team Roster Table -->
     <section class="panel">
       <div class="panel-title"><h2>Current Team Roster & Availability</h2></div>
       <div style="overflow-x:auto;">
@@ -158,6 +189,71 @@
   const memberForm = document.getElementById('member-form');
   const formStatus = document.getElementById('form-status');
   const saveBtn = document.getElementById('save-btn');
+  const jiraForm = document.getElementById('jira-config-form');
+  const jiraStatusBadge = document.getElementById('jira-status-badge');
+  const jiraStatusMsg = document.getElementById('jira-status-msg');
+  const saveJiraBtn = document.getElementById('save-jira-btn');
+
+  async function loadJiraConfig() {
+    try {
+      const res = await fetch('/api/jira-config');
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.jira_url) document.getElementById('jira_url').value = data.jira_url;
+      if (data.project_key) document.getElementById('project_key').value = data.project_key;
+      if (data.user_email) document.getElementById('user_email').value = data.user_email;
+      if (data.api_token_masked) document.getElementById('api_token').placeholder = `Token Set (${data.api_token_masked})`;
+
+      if (data.is_configured && data.my_account_id) {
+        jiraStatusBadge.className = 'badge ok';
+        jiraStatusBadge.textContent = `🟢 Connected (${data.project_key})`;
+      } else {
+        jiraStatusBadge.className = 'badge err';
+        jiraStatusBadge.textContent = '🔴 Not Configured';
+      }
+    } catch (err) {
+      jiraStatusBadge.className = 'badge err';
+      jiraStatusBadge.textContent = '🔴 Error';
+    }
+  }
+
+  jiraForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    saveJiraBtn.disabled = true;
+    saveJiraBtn.textContent = 'Testing Connection…';
+    jiraStatusMsg.className = 'status-msg';
+    jiraStatusMsg.textContent = 'Authenticating with Jira API…';
+
+    const payload = {
+      jira_url: document.getElementById('jira_url').value,
+      project_key: document.getElementById('project_key').value,
+      user_email: document.getElementById('user_email').value,
+      api_token: document.getElementById('api_token').value
+    };
+
+    try {
+      const res = await fetch('/api/jira-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success) {
+        jiraStatusMsg.className = 'status-msg ok';
+        jiraStatusMsg.textContent = `✓ ${data.message}`;
+        loadJiraConfig();
+      } else {
+        jiraStatusMsg.className = 'status-msg err';
+        jiraStatusMsg.textContent = data.message;
+      }
+    } catch (err) {
+      jiraStatusMsg.className = 'status-msg err';
+      jiraStatusMsg.textContent = err.message;
+    } finally {
+      saveJiraBtn.disabled = false;
+      saveJiraBtn.textContent = 'Connect & Test Jira Connection';
+    }
+  });
 
   async function loadTeam() {
     try {
@@ -272,6 +368,7 @@
     return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
+  loadJiraConfig();
   loadTeam();
 </script>
 </body>

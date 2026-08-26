@@ -14,6 +14,7 @@ from database import (
     add_team_member,
     delete_team_member,
     get_all_team_members,
+    get_jira_config,
     get_judge_verdict,
     get_member_availability,
     get_pending_reviews,
@@ -21,6 +22,7 @@ from database import (
     get_review_by_id,
     get_review_by_thread_id,
     reset_review_status_to_pending,
+    save_jira_config,
     set_member_availability,
     set_review_status_if_pending,
 )
@@ -226,6 +228,62 @@ class AvailabilitySetRequest(BaseModel):
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     notes: Optional[str] = None
+
+
+class JiraConfigRequest(BaseModel):
+    jira_url: str = Field(min_length=5)
+    project_key: str = Field(min_length=1)
+    user_email: str = Field(min_length=3)
+    api_token: str = Field(min_length=5)
+
+
+@app.get("/api/jira-config")
+async def fetch_jira_config() -> dict:
+    """Return current active Jira configuration status."""
+    jira_service.reload()
+    config = get_jira_config() or {}
+    masked_token = ""
+    if config.get("api_token"):
+        tok = config["api_token"]
+        masked_token = tok[:6] + "..." + tok[-4:] if len(tok) > 10 else "***"
+    
+    return {
+        "is_configured": jira_service.is_configured,
+        "my_account_id": jira_service.my_account_id,
+        "jira_url": jira_service.jira_url,
+        "project_key": jira_service.project_key,
+        "user_email": jira_service.user_email,
+        "api_token_masked": masked_token,
+    }
+
+
+@app.post("/api/jira-config")
+async def update_jira_config(req: JiraConfigRequest) -> dict:
+    """Save new Jira credentials dynamically and re-test connection."""
+    record = save_jira_config(
+        jira_url=req.jira_url,
+        project_key=req.project_key,
+        user_email=req.user_email,
+        api_token=req.api_token,
+    )
+    jira_service.reload()
+    if not jira_service.is_configured or not jira_service.my_account_id:
+        emit_log(f"[admin warning] Failed to authenticate with Jira using email '{req.user_email}' at '{req.jira_url}'", "warning")
+        return {
+            "success": False,
+            "message": "Saved credentials, but could not authenticate with Jira. Check your URL, email, or API token.",
+            "is_configured": jira_service.is_configured,
+            "my_account_id": None,
+        }
+
+    emit_log(f"[admin] Dynamic Jira connection updated! Connected as Account ID: {jira_service.my_account_id} for project '{req.project_key}'")
+    return {
+        "success": True,
+        "message": f"Successfully connected to Jira! Account ID: {jira_service.my_account_id}",
+        "is_configured": True,
+        "my_account_id": jira_service.my_account_id,
+        "project_key": req.project_key,
+    }
 
 
 @app.get("/api/team")

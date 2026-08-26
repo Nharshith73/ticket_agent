@@ -105,6 +105,18 @@ def init_db() -> None:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS jira_config (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                jira_url TEXT NOT NULL,
+                project_key TEXT NOT NULL,
+                user_email TEXT NOT NULL,
+                api_token TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
 
 
 def insert_log(timestamp: str, message: str, level: str) -> None:
@@ -410,6 +422,45 @@ def is_user_ooo_today(email: str) -> bool:
     if status in {"ooo", "vacation"}:
         return True
     return False
+
+
+def get_jira_config() -> dict | None:
+    """Return stored in-database Jira credentials if set."""
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM jira_config WHERE id = 1").fetchone()
+    return dict(row) if row else None
+
+
+def save_jira_config(
+    jira_url: str,
+    project_key: str,
+    user_email: str,
+    api_token: str,
+) -> dict:
+    """Store or update dynamic Jira integration credentials."""
+    updated_at = datetime.now(timezone.utc).isoformat()
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO jira_config (id, jira_url, project_key, user_email, api_token, updated_at)
+            VALUES (1, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                jira_url=excluded.jira_url,
+                project_key=excluded.project_key,
+                user_email=excluded.user_email,
+                api_token=excluded.api_token,
+                updated_at=excluded.updated_at
+            """,
+            (
+                jira_url.strip().rstrip("/"),
+                project_key.strip().upper(),
+                user_email.strip().lower(),
+                api_token.strip(),
+                updated_at,
+            ),
+        )
+        row = conn.execute("SELECT * FROM jira_config WHERE id = 1").fetchone()
+        return dict(row) if row else {}
 
 
 init_db()
