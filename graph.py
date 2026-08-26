@@ -1,7 +1,15 @@
 import sqlite3
 
-from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
+try:
+    from langgraph.checkpoint.sqlite import SqliteSaver
+except ImportError:
+    SqliteSaver = None
+
+try:
+    from langgraph.checkpoint.memory import MemorySaver
+except ImportError:
+    MemorySaver = None
 
 from database import DB_PATH
 from nodes import (
@@ -52,8 +60,19 @@ builder.add_edge("create_ticket", "route_assignee")
 builder.add_edge("route_assignee", "update_ticket")
 builder.add_edge("update_ticket", END)
 
-# SqliteSaver is safe for this synchronous dashboard workflow: its internal lock
-# serializes access to the shared connection, while other database reads use WAL.
-checkpoint_connection = sqlite3.connect(DB_PATH, check_same_thread=False)
-checkpointer = SqliteSaver(checkpoint_connection)
+# SqliteSaver with MemorySaver fallback for serverless safety
+checkpointer = None
+if SqliteSaver:
+    try:
+        checkpoint_connection = sqlite3.connect(DB_PATH, check_same_thread=False)
+        checkpointer = SqliteSaver(checkpoint_connection)
+    except Exception:
+        pass
+
+if checkpointer is None and MemorySaver:
+    try:
+        checkpointer = MemorySaver()
+    except Exception:
+        pass
+
 app = builder.compile(checkpointer=checkpointer)
