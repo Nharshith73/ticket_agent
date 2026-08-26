@@ -27,13 +27,10 @@ from database import (
     set_review_status_if_pending,
 )
 from graph import app as graph_app
-from jira_client import JiraClient
 from log_utils import emit_log, stream_log_events
+from nodes import jira_client as jira_service
 
 ADMIN_TEMPLATE_PATH = Path(__file__).with_name("templates") / "admin.html"
-jira_service = JiraClient()
-
-
 TEMPLATE_PATH = Path(__file__).with_name("templates") / "index.html"
 app = FastAPI(title="Support Ticket Triage Dashboard")
 

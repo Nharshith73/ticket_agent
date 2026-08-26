@@ -53,6 +53,7 @@ class JiraClient:
 
     def search_duplicate(self, summary: str, category: str) -> Optional[str]:
         """Search JIRA for existing duplicate tickets"""
+        self.reload()
         if not self.is_configured:
             print(f"[stub] Would search JIRA for duplicate: category={category}, summary='{summary}'")
             return None
@@ -90,6 +91,7 @@ class JiraClient:
 
     def create_ticket(self, summary: str, description: str, category: str, urgency: str, due_date: Optional[str] = None) -> str:
         """Create a new JIRA ticket using Atlassian Document Format (ADF)"""
+        self.reload()
         if not self.is_configured:
             fake_key = f"{self.project_key}-101"
             print(f"[stub] Would create JIRA ticket: key={fake_key}, summary='{summary}', category={category}, urgency={urgency}, due_date={due_date}")
@@ -137,6 +139,7 @@ class JiraClient:
 
     def update_assignee(self, ticket_key: str, assignee: str) -> bool:
         """Assign JIRA ticket to account ID / user"""
+        self.reload()
         if not self.is_configured:
             print(f"[stub] Would assign JIRA ticket '{ticket_key}' to assignee '{assignee}'")
             return True
@@ -172,6 +175,7 @@ class JiraClient:
 
     def get_account_id_by_email(self, email: str) -> Optional[str]:
         """Fetch Jira accountId for a given email address using Jira API."""
+        self.reload()
         if not self.is_configured:
             print(f"[stub] Would lookup Jira accountId for email: {email}")
             return f"stub_acc_{email.split('@')[0]}"
@@ -192,6 +196,7 @@ class JiraClient:
 
     def get_user_open_ticket_count(self, account_id: str) -> int:
         """Return count of active non-completed Jira tickets for a user via JQL."""
+        self.reload()
         if not self.is_configured:
             return 0
 
