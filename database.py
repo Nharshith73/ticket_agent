@@ -30,7 +30,10 @@ def _connect() -> sqlite3.Connection:
 def init_db() -> None:
     """Create the dashboard tables. LangGraph creates checkpoint tables itself."""
     with _connect() as conn:
-        conn.execute("PRAGMA journal_mode = WAL")
+        try:
+            conn.execute("PRAGMA journal_mode = WAL")
+        except sqlite3.OperationalError:
+            conn.execute("PRAGMA journal_mode = DELETE")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS logs (
