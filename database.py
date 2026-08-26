@@ -11,7 +11,7 @@ from pathlib import Path
 def _get_db_path() -> str:
     if os.environ.get("TRIAGE_DB_PATH"):
         return os.environ["TRIAGE_DB_PATH"]
-    if os.environ.get("VERCEL") or os.environ.get("NOW_REGION"):
+    if os.environ.get("VERCEL") or os.environ.get("NOW_REGION") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
         return "/tmp/triage.db"
     return str(Path(__file__).with_name("triage.db"))
 
@@ -23,18 +23,25 @@ def _connect() -> sqlite3.Connection:
     """Return an independent connection suitable for short web/database operations."""
     connection = sqlite3.connect(DB_PATH, check_same_thread=False)
     connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA busy_timeout = 5000")
+    try:
+        connection.execute("PRAGMA busy_timeout = 5000")
+    except Exception:
+        pass
     return connection
 
 
 def init_db() -> None:
     """Create the dashboard tables. LangGraph creates checkpoint tables itself."""
-    with _connect() as conn:
-        try:
-            conn.execute("PRAGMA journal_mode = WAL")
-        except sqlite3.OperationalError:
-            conn.execute("PRAGMA journal_mode = DELETE")
-        conn.execute(
+    try:
+        with _connect() as conn:
+            try:
+                conn.execute("PRAGMA journal_mode = WAL")
+            except Exception:
+                try:
+                    conn.execute("PRAGMA journal_mode = DELETE")
+                except Exception:
+                    pass
+            conn.execute(
             """
             CREATE TABLE IF NOT EXISTS logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -120,6 +127,8 @@ def init_db() -> None:
             )
             """
         )
+    except Exception as e:
+        print(f"[db warning] Could not initialize database on startup: {e}")
 
 
 def insert_log(timestamp: str, message: str, level: str) -> None:

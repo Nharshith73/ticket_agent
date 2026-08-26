@@ -14,7 +14,12 @@ class JiraClient:
 
     def reload(self):
         """Reload credentials dynamically from database or .env fallback."""
-        db_config = get_jira_config()
+        db_config = None
+        try:
+            db_config = get_jira_config()
+        except Exception:
+            pass
+
         if db_config:
             self.jira_url = db_config.get("jira_url", "").strip().rstrip("/")
             self.user_email = db_config.get("user_email", "").strip()
