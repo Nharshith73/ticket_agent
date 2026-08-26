@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin Settings — Support Ticket Triage</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#15130f; --panel:#1c1912; --panel-2:#221e15; --border:#332c1e; --border-soft:#241f16;
+    --text:#eee6d6; --muted:#a89a80; --muted-2:#6b6152;
+    --accent:#4f7896; --accent-dim:#182833; --accent-text:#9dc3dc;
+    --red:#c0392b; --red-bg:#241512; --red-text:#e08074;
+    --amber:#b9812c; --amber-bg:#241d10; --amber-text:#dcaf5f;
+    --green:#5a7d52; --green-bg:#171f14; --green-text:#93b487;
+    --font-display:'IBM Plex Sans', system-ui, sans-serif;
+    --font-body:'Inter', system-ui, sans-serif;
+    --font-mono:'IBM Plex Mono', ui-monospace, monospace;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; background:var(--bg); color:var(--text); font-family:var(--font-body);
+    padding:28px 32px 40px; max-width:1100px; margin:0 auto;
+  }
+  header{ display:flex; align-items:center; justify-space-between; gap:16px; margin-bottom:28px; border-bottom:1px solid var(--border); padding-bottom:16px; }
+  .brand{ display:flex; align-items:center; gap:12px; }
+  .brand-mark{
+    width:34px; height:34px; border-radius:3px; background:var(--panel-2); border:1px solid var(--border);
+    display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-weight:600; color:var(--accent-text); font-size:.8rem;
+  }
+  h1{ font-family:var(--font-display); font-weight:600; font-size:1.4rem; margin:0; }
+  .back-btn{
+    font-family:var(--font-mono); font-size:.78rem; color:var(--muted); text-decoration:none;
+    padding:6px 12px; border:1px solid var(--border); border-radius:4px; background:var(--panel-2); transition:all .15s ease;
+  }
+  .back-btn:hover{ color:var(--text); border-color:var(--accent); }
+  
+  .layout{ display:grid; grid-template-columns:320px 1fr; gap:20px; }
+  .panel{ background:var(--panel); border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+  .panel-title{ padding:14px 18px; border-bottom:1px solid var(--border); background:var(--panel-2); }
+  .panel-title h2{ font-family:var(--font-display); font-size:.95rem; margin:0; }
+  
+  form{ padding:18px; display:flex; flex-direction:column; gap:14px; }
+  .field{ display:flex; flex-direction:column; gap:5px; }
+  .field label{ font-family:var(--font-mono); font-size:.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  input, select, button{ font:inherit; border-radius:4px; border:1px solid var(--border); font-size:.84rem; }
+  input, select{ background:var(--panel-2); color:var(--text); padding:9px 12px; font-family:var(--font-mono); }
+  input:focus, select:focus{ border-color:var(--accent); outline:none; }
+  button{ cursor:pointer; font-weight:600; font-family:var(--font-body); padding:10px 16px; }
+  .btn-primary{ background:var(--accent-dim); color:var(--accent-text); border-color:var(--accent); }
+  .btn-primary:hover{ background:var(--accent); color:#0d1a21; }
+  .btn-danger{ background:transparent; color:var(--red-text); border-color:var(--red-bg); font-size:.72rem; padding:4px 8px; font-family:var(--font-mono); }
+  .btn-danger:hover{ background:var(--red-bg); }
+
+  .status-msg{ font-family:var(--font-mono); font-size:.78rem; padding:0 18px 12px; min-height:1.2em; }
+  .status-msg.ok{ color:var(--green-text); }
+  .status-msg.err{ color:var(--red-text); }
+
+  table{ border-collapse:collapse; width:100%; font-size:.83rem; }
+  th, td{ text-align:left; padding:12px 16px; border-bottom:1px solid var(--border-soft); vertical-align:middle; }
+  th{ color:var(--muted-2); font-size:.68rem; text-transform:uppercase; letter-spacing:.06em; background:var(--panel-2); font-family:var(--font-mono); }
+  .badge{ display:inline-block; font-family:var(--font-mono); font-size:.7rem; padding:2px 6px; border-radius:3px; border:1px solid var(--border); }
+  .badge.cat{ background:var(--panel-2); color:var(--accent-text); border-color:var(--accent-dim); }
+  .badge.available{ background:var(--green-bg); color:var(--green-text); border-color:var(--green); }
+  .badge.ooo{ background:var(--amber-bg); color:var(--amber-text); border-color:var(--amber); }
+  .badge.vacation{ background:var(--red-bg); color:var(--red-text); border-color:var(--red); }
+  
+  .jira-id{ font-family:var(--font-mono); font-size:.72rem; color:var(--muted-2); }
+  .workload-pill{ font-family:var(--font-mono); font-size:.78rem; font-weight:600; color:var(--text); }
+  .empty{ text-align:center; color:var(--muted-2); padding:32px 16px; font-family:var(--font-mono); font-size:.82rem; }
+</style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <div class="brand-mark">TR</div>
+      <div>
+        <h1>Team & Routing Administration</h1>
+        <div style="font-size:.8rem; color:var(--muted); margin-top:2px;">Manage team members, category assignments, calendar availability, and Jira links.</div>
+      </div>
+    </div>
+    <a href="/" class="back-btn">← Back to Dashboard</a>
+  </header>
+
+  <main class="layout">
+    <!-- Add/Update Member Form -->
+    <section class="panel">
+      <div class="panel-title"><h2>Add Team Member</h2></div>
+      <form id="member-form">
+        <div class="field">
+          <label for="name">Full Name</label>
+          <input type="text" id="name" required placeholder="e.g. Alice Chen">
+        </div>
+        <div class="field">
+          <label for="email">Email Address</label>
+          <input type="email" id="email" required placeholder="e.g. alice@example.com">
+        </div>
+        <div class="field">
+          <label for="category">Primary Domain / Role</label>
+          <input type="text" id="category" required placeholder="e.g. frontend, backend, design, marketing, bug" list="category-suggestions">
+          <datalist id="category-suggestions">
+            <option value="frontend">Frontend (UI / React / CSS)</option>
+            <option value="backend">Backend (Python / DB / Logic)</option>
+            <option value="api">API & Integrations</option>
+            <option value="design">UI/UX Design</option>
+            <option value="marketing">Marketing & Growth</option>
+            <option value="auth">Authentication & Security</option>
+            <option value="billing">Billing & Payments</option>
+            <option value="infra">Infrastructure & DevOps</option>
+            <option value="bug">Software Bugs</option>
+            <option value="feature_request">Feature Requests</option>
+            <option value="other">General Triage</option>
+          </datalist>
+        </div>
+        <div class="field">
+          <label for="jira_account_id">Jira Account ID (Optional)</label>
+          <input type="text" id="jira_account_id" placeholder="Leave blank to auto-lookup by email">
+        </div>
+        <button type="submit" class="btn-primary" id="save-btn">Save Member & Auto-Link Jira</button>
+      </form>
+      <div class="status-msg" id="form-status"></div>
+      <div id="triage-redirect-banner" style="display:none; padding:12px 18px; background:var(--accent-dim); border-top:1px solid var(--accent); margin-top:8px;">
+        <div style="font-size:.82rem; color:var(--accent-text); font-weight:600; margin-bottom:6px;">Team Member Configured!</div>
+        <a href="/" class="btn-primary" style="display:inline-block; text-decoration:none; text-align:center; padding:8px 14px; font-size:.8rem;">
+          Go to Triage Dashboard →
+        </a>
+      </div>
+    </section>
+
+    <!-- Team Roster Table -->
+    <section class="panel">
+      <div class="panel-title"><h2>Current Team Roster & Availability</h2></div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Member</th>
+              <th>Category</th>
+              <th>Calendar Status</th>
+              <th>Active Tickets</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="roster-body">
+            <tr><td colspan="5" class="empty">Loading team members…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+<script>
+  const rosterBody = document.getElementById('roster-body');
+  const memberForm = document.getElementById('member-form');
+  const formStatus = document.getElementById('form-status');
+  const saveBtn = document.getElementById('save-btn');
+
+  async function loadTeam() {
+    try {
+      const res = await fetch('/api/team');
+      if (!res.ok) throw new Error('Failed to load team roster.');
+      const members = await res.json();
+      renderRoster(members);
+    } catch (err) {
+      rosterBody.innerHTML = `<tr><td colspan="5" class="empty" style="color:var(--red-text);">${err.message}</td></tr>`;
+    }
+  }
+
+  function renderRoster(members) {
+    if (!members || members.length === 0) {
+      rosterBody.innerHTML = `<tr><td colspan="5" class="empty">No team members configured yet. Add your first member on the left!</td></tr>`;
+      return;
+    }
+
+    rosterBody.innerHTML = members.map(m => {
+      const avail = m.availability || 'available';
+      return `
+        <tr>
+          <td>
+            <div style="font-weight:600;">${escapeHtml(m.name)}</div>
+            <div class="jira-id">${escapeHtml(m.email)}</div>
+            <div class="jira-id" style="font-size:.66rem;">Jira ID: ${escapeHtml(m.jira_account_id || 'Not Linked')}</div>
+          </td>
+          <td><span class="badge cat">${escapeHtml(m.primary_category)}</span></td>
+          <td>
+            <select style="font-size:.74rem; padding:4px 6px;" onchange="updateAvailability('${escapeHtml(m.email)}', this.value)">
+              <option value="available" ${avail === 'available' ? 'selected' : ''}>🟢 Available</option>
+              <option value="ooo" ${avail === 'ooo' ? 'selected' : ''}>🟡 Out of Office</option>
+              <option value="vacation" ${avail === 'vacation' ? 'selected' : ''}>🔴 On Vacation</option>
+            </select>
+          </td>
+          <td>
+            <span class="workload-pill">${m.open_ticket_count || 0} active</span>
+          </td>
+          <td>
+            <button type="button" class="btn-danger" onclick="deleteMember('${m.id}')">Delete</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  async function updateAvailability(email, status) {
+    try {
+      await fetch('/api/availability', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, status })
+      });
+      loadTeam();
+    } catch (err) {
+      alert('Unable to update availability.');
+    }
+  }
+
+  async function deleteMember(id) {
+    if (!confirm('Remove this team member?')) return;
+    try {
+      const res = await fetch(`/api/team/${id}`, { method: 'DELETE' });
+      if (res.ok) loadTeam();
+      else alert('Failed to delete member.');
+    } catch (err) {
+      alert('Error deleting member.');
+    }
+  }
+
+  memberForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Linking with Jira…';
+    formStatus.className = 'status-msg';
+    formStatus.textContent = 'Searching Jira for user account ID…';
+
+    const payload = {
+      name: document.getElementById('name').value,
+      email: document.getElementById('email').value,
+      primary_category: document.getElementById('category').value,
+      jira_account_id: document.getElementById('jira_account_id').value || null
+    };
+
+    try {
+      const res = await fetch('/api/team', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Unable to save member.');
+      
+      formStatus.className = 'status-msg ok';
+      formStatus.textContent = `✓ Linked & saved ${data.name} (${data.jira_account_id})`;
+      document.getElementById('triage-redirect-banner').style.display = 'block';
+      document.getElementById('name').value = '';
+      document.getElementById('email').value = '';
+      document.getElementById('jira_account_id').value = '';
+      loadTeam();
+    } catch (err) {
+      formStatus.className = 'status-msg err';
+      formStatus.textContent = err.message;
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save Member & Auto-Link Jira';
+    }
+  });
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  loadTeam();
+</script>
+</body>
+</html>

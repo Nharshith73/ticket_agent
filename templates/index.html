@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Triage — Support Ticket Pipeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    color-scheme: dark;
+    /* Warm ink/charcoal base — case-file paperwork, not blue-black glow */
+    --bg:#15130f; --panel:#1c1912; --panel-2:#221e15; --border:#332c1e; --border-soft:#241f16;
+    --text:#eee6d6; --muted:#a89a80; --muted-2:#6b6152;
+    --accent:#4f7896; --accent-dim:#182833; --accent-text:#9dc3dc;
+    --red:#c0392b; --red-bg:#241512; --red-text:#e08074;
+    --amber:#b9812c; --amber-bg:#241d10; --amber-text:#dcaf5f;
+    --green:#5a7d52; --green-bg:#171f14; --green-text:#93b487;
+    --blue:var(--accent); --blue-bg:var(--accent-dim); --blue-text:var(--accent-text);
+    --font-display:'IBM Plex Sans', system-ui, sans-serif;
+    --font-body:'Inter', system-ui, sans-serif;
+    --font-mono:'IBM Plex Mono', ui-monospace, monospace;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; background:var(--bg); color:var(--text); font-family:var(--font-body);
+    padding:28px 32px 40px;
+  }
+  ::selection{ background:var(--accent-dim); color:var(--accent-text); }
+  :focus-visible{ outline:2px solid var(--accent); outline-offset:2px; border-radius:4px; }
+
+  /* ---------- Header ---------- */
+  header{ display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-bottom:22px; flex-wrap:wrap; }
+  .brand{ display:flex; align-items:center; gap:12px; }
+  .brand-mark{
+    width:34px; height:34px; border-radius:3px; background:var(--panel-2); border:1px solid var(--border);
+    display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-weight:600; color:var(--accent-text); font-size:.8rem;
+    flex-shrink:0;
+  }
+  h1{ font-family:var(--font-display); font-weight:600; font-size:1.5rem; margin:0; letter-spacing:-.01em; }
+  .subtitle{ color:var(--muted); font-size:.86rem; margin:2px 0 0; }
+  .conn-status{ display:flex; align-items:center; gap:7px; font-family:var(--font-mono); font-size:.76rem; color:var(--muted); }
+  .conn-dot{ width:6px; height:6px; border-radius:1px; background:var(--muted-2); transition:background .2s; }
+  .conn-dot.on{ background:var(--green); }
+  .conn-dot.retry{ background:var(--amber); }
+
+  /* ---------- Pipeline rail (ticket-stub nodes on a perforated line) ---------- */
+  .rail-wrap{
+    background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:16px 20px 18px; margin-bottom:20px;
+    position:relative; overflow:hidden;
+  }
+  .rail-label{ font-family:var(--font-mono); font-size:.7rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted-2); margin-bottom:16px; display:flex; justify-content:space-between; }
+  .rail{ display:flex; align-items:flex-start; }
+  .rail-node{ display:flex; flex-direction:column; align-items:center; gap:9px; position:relative; flex:1; min-width:0; }
+  .rail-dot{
+    width:20px; height:14px; border-radius:2px; background:var(--panel-2); border:1.5px dashed var(--border);
+    transition:all .2s ease; flex-shrink:0; position:relative; z-index:1;
+  }
+  .rail-dot.active{ background:var(--accent-dim); border:1.5px solid var(--accent); }
+  .rail-dot.waiting{ background:var(--amber-bg); border:1.5px solid var(--amber); }
+  .rail-dot.done{ background:var(--green); border:1.5px solid var(--green); }
+  .rail-dot.done.dup{ background:var(--amber); border-color:var(--amber); }
+  .rail-dot.done.bad{ background:var(--red); border-color:var(--red); }
+  .rail-name{ font-family:var(--font-mono); font-size:.7rem; color:var(--muted); text-align:center; white-space:nowrap; }
+  .rail-node.is-current .rail-name{ color:var(--text); font-weight:600; }
+  .rail-line{ position:absolute; top:6px; left:50%; width:100%; height:0; border-top:1.5px dotted var(--border); z-index:0; }
+  .rail-node:last-child .rail-line{ display:none; }
+  .rail-line.filled{ border-top-color:var(--accent); }
+  .rail-idle{ color:var(--muted-2); font-family:var(--font-mono); font-size:.72rem; }
+
+  /* ---------- Ingest form ---------- */
+  .ingest{ display:grid; grid-template-columns:150px 1fr auto; gap:10px; margin-bottom:8px; }
+  select, textarea, button{ font:inherit; border-radius:4px; border:1px solid var(--border); }
+  select, textarea{ color:var(--text); background:var(--panel-2); padding:11px 12px; font-family:var(--font-body); }
+  textarea{ min-height:58px; resize:vertical; font-family:var(--font-mono); font-size:.85rem; line-height:1.5; }
+  textarea::placeholder{ color:var(--muted-2); }
+  select:focus, textarea:focus{ border-color:var(--accent); }
+  button{ cursor:pointer; border:1px solid var(--accent); padding:0 18px; font-weight:600; background:var(--accent-dim); color:var(--accent-text); font-family:var(--font-body); transition:background .15s; }
+  button:hover{ background:var(--accent); color:#0d1a21; } button:active{ transform:scale(.98); } button:disabled{ cursor:wait; opacity:.5; }
+  #ingest-status{ min-height:1.3em; color:var(--muted); margin:0 0 22px; font-size:.84rem; font-family:var(--font-mono); }
+  #ingest-status.err{ color:var(--red-text); }
+  #ingest-status.ok{ color:var(--green-text); }
+
+  /* ---------- Layout ---------- */
+  .layout{ display:grid; grid-template-columns:minmax(340px,.9fr) minmax(480px,1.4fr); gap:18px; }
+  .panel{ background:var(--panel); border:1px solid var(--border); border-radius:6px; overflow:hidden; display:flex; flex-direction:column; }
+  .panel-title{ padding:14px 18px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
+  .panel-title h2{ font-family:var(--font-display); font-weight:600; font-size:.95rem; margin:0; }
+  .status{ color:var(--muted); font-size:.78rem; font-family:var(--font-mono); }
+
+  /* ---------- Logs ---------- */
+  .table-wrap{ overflow:auto; max-height:56vh; }
+  table{ border-collapse:collapse; width:100%; font-size:.83rem; }
+  th, td{ text-align:left; padding:10px 14px; border-bottom:1px solid var(--border-soft); vertical-align:top; }
+  th{ color:var(--muted-2); font-size:.68rem; text-transform:uppercase; letter-spacing:.06em; position:sticky; top:0; background:var(--panel); font-family:var(--font-mono); font-weight:500; }
+  .log-time{ font-family:var(--font-mono); color:var(--muted); white-space:nowrap; font-size:.78rem; }
+  .log-message{ white-space:pre-wrap; overflow-wrap:anywhere; font-family:var(--font-mono); font-size:.8rem; color:#d9cfba; }
+  .badge{ display:inline-block; font-size:.72rem; font-weight:600; font-family:var(--font-mono); }
+  .badge::before{ content:'['; } .badge::after{ content:']'; }
+  .badge.info{ background:var(--blue-bg); color:var(--blue-text); }
+  .badge.warning{ background:var(--amber-bg); color:var(--amber-text); }
+  .badge.error{ background:var(--red-bg); color:var(--red-text); }
+
+  /* ---------- Review queue ---------- */
+  .queue-list{ display:flex; flex-direction:column; overflow:auto; max-height:56vh; }
+  .queue-item{ display:flex; gap:14px; padding:14px 16px 14px 14px; border-bottom:1px solid var(--border-soft); border-left:3px solid var(--border); }
+  .queue-item.urg-high{ border-left-color:var(--red); }
+  .queue-item.urg-medium{ border-left-color:var(--amber); }
+  .queue-item.urg-low{ border-left-color:var(--green); }
+  .qi-meter{ flex-shrink:0; width:54px; display:flex; flex-direction:column; align-items:center; gap:5px; padding-top:2px; }
+  .qi-conf-num{ font-family:var(--font-mono); font-weight:600; font-size:.92rem; }
+  .qi-conf-num.band-low{ color:var(--red-text); } .qi-conf-num.band-mid{ color:var(--amber-text); } .qi-conf-num.band-high{ color:var(--green-text); }
+  .qi-bar{ width:36px; height:3px; border-radius:0; background:var(--border); overflow:hidden; }
+  .qi-bar-fill{ height:100%; border-radius:0; }
+  .qi-bar-fill.band-low{ background:var(--red); } .qi-bar-fill.band-mid{ background:var(--amber); } .qi-bar-fill.band-high{ background:var(--green); }
+  .qi-body{ flex:1; min-width:0; }
+  .qi-summary{ font-weight:600; font-size:.9rem; margin-bottom:5px; }
+  .qi-tags{ display:flex; gap:6px; margin-bottom:8px; flex-wrap:wrap; }
+  .tag{ font-family:var(--font-mono); font-size:.66rem; text-transform:uppercase; padding:2px 6px; border-radius:2px; letter-spacing:.03em; border:1px solid var(--border); color:var(--muted); }
+  .tag.urg-high{ color:var(--red-text); border-color:var(--red-bg); background:var(--red-bg); }
+  .tag.urg-medium{ color:var(--amber-text); border-color:var(--amber-bg); background:var(--amber-bg); }
+  .tag.urg-low{ color:var(--green-text); border-color:var(--green-bg); background:var(--green-bg); }
+  .qi-raw{ color:var(--muted); font-size:.79rem; font-family:var(--font-mono); max-height:2.9em; overflow:hidden; line-height:1.45; }
+  .qi-overrides{ display:flex; gap:10px; margin-top:8px; flex-wrap:wrap; }
+  .qi-field{ display:flex; flex-direction:column; gap:3px; flex:1; min-width:130px; }
+  .qi-field label{ font-family:var(--font-mono); font-size:.68rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  .qi-field input{ background:var(--panel); border:1px solid var(--border); color:var(--text); font-family:var(--font-mono); font-size:.78rem; padding:4px 8px; border-radius:3px; }
+  .qi-field input:focus{ border-color:var(--accent); }
+  .qi-actions{ flex-shrink:0; display:flex; flex-direction:column; gap:6px; justify-content:center; }
+  .qi-actions button{ padding:7px 14px; font-size:.78rem; }
+  .approve{ background:var(--green); border-color:var(--green); color:#0e1a0e; }
+  .approve:hover{ background:var(--green); filter:brightness(1.1); color:#0e1a0e; }
+  .reject{ background:transparent; color:var(--red-text); border:1px solid var(--red-bg); }
+  .reject:hover{ background:var(--red-bg); color:var(--red-text); }
+  .empty{ color:var(--muted-2); text-align:center; padding:36px 20px; font-size:.85rem; }
+
+  /* ---------- Recent outcomes strip ---------- */
+  .outcomes{ display:flex; gap:10px; overflow-x:auto; padding:14px 16px; }
+  .outcomes:empty::after{ content:'Outcomes from this session will appear here as runs complete.'; color:var(--muted-2); font-size:.8rem; }
+  .outcome-card{
+    flex-shrink:0; min-width:190px; background:var(--panel-2); border:1px solid var(--border); border-radius:3px; padding:10px 12px;
+    font-size:.78rem; display:flex; flex-direction:column; justify-content:space-between; gap:6px;
+  }
+  .outcome-key{ font-family:var(--font-mono); font-weight:600; font-size:.85rem; margin-bottom:4px; }
+  .outcome-key.created{ color:var(--green-text); } .outcome-key.dup{ color:var(--amber-text); } .outcome-key.rejected{ color:var(--red-text); }
+  .outcome-summary{ color:var(--muted); font-size:.75rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ai-review-btn{
+    align-self:flex-start; margin-top:4px; font-size:.68rem; font-family:var(--font-mono);
+    padding:3px 8px; border-radius:3px; background:var(--panel); border:1px solid var(--border);
+    color:var(--accent-text); font-weight:500; display:inline-flex; align-items:center; gap:4px; transition:all .15s ease;
+    cursor:pointer;
+  }
+  .ai-review-btn:hover{ background:var(--accent-dim); color:var(--accent-text); border-color:var(--accent); transform:translateY(-1px); }
+
+  /* ---------- Judge Audit Modal ---------- */
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,.7); backdrop-filter:blur(5px);
+    display:flex; align-items:center; justify-content:center; z-index:1000; opacity:0; pointer-events:none; transition:opacity .2s ease;
+  }
+  .modal-overlay.open{ opacity:1; pointer-events:auto; }
+  .modal-card{
+    background:var(--panel); border:1px solid var(--border); border-radius:8px; width:90%; max-width:440px;
+    box-shadow:0 20px 40px rgba(0,0,0,.8); overflow:hidden; display:flex; flex-direction:column;
+    transform:scale(.95); transition:transform .2s ease;
+  }
+  .modal-overlay.open .modal-card{ transform:scale(1); }
+  .modal-header{ padding:14px 18px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; background:var(--panel-2); }
+  .modal-header h3{ margin:0; font-family:var(--font-display); font-size:.95rem; display:flex; align-items:center; gap:8px; color:var(--text); }
+  .modal-close{ background:none; border:none; color:var(--muted); font-size:1.3rem; cursor:pointer; padding:0 4px; line-height:1; }
+  .modal-close:hover{ color:var(--text); }
+  .modal-body{ padding:18px; font-size:.85rem; display:flex; flex-direction:column; gap:14px; max-height:70vh; overflow-y:auto; }
+  .judge-score-badge{
+    display:inline-flex; align-items:center; gap:8px; font-family:var(--font-mono); font-weight:600; font-size:1.1rem;
+    padding:6px 12px; border-radius:4px; width:fit-content; background:var(--panel-2); border:1px solid var(--border);
+  }
+  .judge-score-badge.high{ color:var(--green-text); border-color:var(--green); }
+  .judge-score-badge.mid{ color:var(--amber-text); border-color:var(--amber); }
+  .judge-score-badge.low{ color:var(--red-text); border-color:var(--red); }
+  .judge-sec-title{ font-family:var(--font-mono); font-size:.7rem; text-transform:uppercase; color:var(--muted-2); letter-spacing:.05em; margin-bottom:4px; }
+  .judge-reasoning{ background:var(--panel-2); border:1px solid var(--border-soft); border-radius:4px; padding:10px 12px; font-family:var(--font-body); font-size:.82rem; line-height:1.45; color:var(--text); }
+  .judge-flag-list{ margin:0; padding-left:18px; font-family:var(--font-mono); font-size:.78rem; color:var(--amber-text); display:flex; flex-direction:column; gap:4px; }
+  .judge-empty{ color:var(--muted); text-align:center; padding:20px 10px; font-family:var(--font-mono); font-size:.82rem; }
+
+  @media (max-width:940px){
+    body{ padding:18px; }
+    .ingest{ grid-template-columns:1fr; }
+    .layout{ grid-template-columns:1fr; }
+    .table-wrap, .queue-list{ max-height:46vh; }
+    .rail-name{ font-size:.62rem; }
+  }
+</style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <div class="brand-mark">TR</div>
+      <div>
+        <h1>Support Ticket Triage</h1>
+        <p class="subtitle">Submit an issue, watch it move through the pipeline, and approve ambiguous extractions.</p>
+      </div>
+    </div>
+    <div style="display:flex; align-items:center; gap:16px;">
+      <a href="/admin" style="font-family:var(--font-mono); font-size:.78rem; color:var(--accent-text); background:var(--accent-dim); border:1px solid var(--accent); padding:6px 14px; border-radius:4px; text-decoration:none; font-weight:600; transition:all .15s ease;" onmouseover="this.style.background='var(--accent)'; this.style.color='#0d1a21';" onmouseout="this.style.background='var(--accent-dim)'; this.style.color='var(--accent-text)';">⚙ Admin Dashboard</a>
+      <div class="conn-status"><span class="conn-dot" id="conn-dot"></span><span id="log-status">Connecting…</span></div>
+    </div>
+  </header>
+
+  <div class="rail-wrap">
+    <div class="rail-label"><span>Pipeline</span><span id="rail-thread">Idle — waiting for a run</span></div>
+    <div class="rail" id="rail"></div>
+  </div>
+
+  <form class="ingest" id="ingest-form">
+    <select id="source-tag" aria-label="Source type">
+      <option value="email">Email</option>
+      <option value="meeting_note">Meeting note</option>
+    </select>
+    <textarea id="raw-text" required maxlength="50000" placeholder="Paste an email or meeting note to triage…"></textarea>
+    <button id="ingest-button" type="submit">Start triage</button>
+  </form>
+  <div id="ingest-status" aria-live="polite"></div>
+
+  <main class="layout">
+    <section class="panel">
+      <div class="panel-title"><h2>Live logs</h2><span class="status" id="log-count"></span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Time</th><th>Level</th><th>Message</th></tr></thead>
+          <tbody id="logs"><tr><td colspan="3" class="empty">Waiting for pipeline events.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title"><h2>Human review queue</h2><span class="status" id="queue-count"></span></div>
+      <div class="queue-list" id="review-queue"><div class="empty">No reviews waiting for a human decision.</div></div>
+    </section>
+  </main>
+
+  <section class="panel" style="margin-top:18px;">
+    <div class="panel-title"><h2>Recent outcomes</h2><span class="status">This session</span></div>
+    <div class="outcomes" id="outcomes"></div>
+  </section>
+
+  <!-- ---------- Judge Audit Modal ---------- -->
+  <div class="modal-overlay" id="judge-modal" onclick="if(event.target===this)closeJudgeModal()">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3><span id="modal-ticket-id">AI Review</span></h3>
+        <button type="button" class="modal-close" onclick="closeJudgeModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="modal-body">
+        <div class="judge-empty">Loading audit decision…</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // ---------- Elements ----------
+  const logs = document.getElementById('logs');
+  const logCount = document.getElementById('log-count');
+  const queue = document.getElementById('review-queue');
+  const queueCount = document.getElementById('queue-count');
+  const ingestForm = document.getElementById('ingest-form');
+  const ingestButton = document.getElementById('ingest-button');
+  const ingestStatus = document.getElementById('ingest-status');
+  const connDot = document.getElementById('conn-dot');
+  const logStatus = document.getElementById('log-status');
+  const railThread = document.getElementById('rail-thread');
+  const outcomes = document.getElementById('outcomes');
+
+  let loggedCount = 0;
+
+  // ---------- Pipeline rail ----------
+  const STAGES = [
+    { id:'extract',  name:'Extract' },
+    { id:'review',   name:'Review' },
+    { id:'duplicate',name:'Duplicate Check' },
+    { id:'resolve',  name:'Create Ticket' },
+    { id:'assign',   name:'Assign' },
+  ];
+  const rail = document.getElementById('rail');
+  STAGES.forEach((s, i) => {
+    const node = document.createElement('div');
+    node.className = 'rail-node';
+    node.id = `rail-${s.id}`;
+    node.innerHTML = `<div class="rail-line" id="rail-line-${s.id}"></div><div class="rail-dot" id="rail-dot-${s.id}"></div><div class="rail-name">${s.name}</div>`;
+    rail.append(node);
+  });
+
+  function setStage(id, state) {
+    const dot = document.getElementById(`rail-dot-${id}`);
+    const line = document.getElementById(`rail-line-${id}`);
+    const node = document.getElementById(`rail-${id}`);
+    if (!dot) return;
+    dot.className = 'rail-dot' + (state ? ' ' + state : '');
+    if (state === 'done' || state === 'active' || state === 'waiting') { line?.classList.add('filled'); }
+    STAGES.forEach(s => document.getElementById(`rail-${s.id}`)?.classList.remove('is-current'));
+    if (state === 'active' || state === 'waiting') node?.classList.add('is-current');
+  }
+  function resetRail() {
+    STAGES.forEach(s => { setStage(s.id, ''); document.getElementById(`rail-line-${s.id}`)?.classList.remove('filled'); });
+  }
+  resetRail();
+
+  function interpretForRail(message) {
+    if (message.startsWith('[extract] Reading')) {
+      resetRail(); setStage('extract', 'active'); railThread.textContent = 'Run in progress — extracting issue…';
+    } else if (message.startsWith('[extract] Category:') || message.startsWith('[extract] Heuristic result')) {
+      setStage('extract', 'done'); setStage('review', 'active');
+    } else if (message.includes('[human_review]') && message.includes('>= 75%')) {
+      setStage('review', 'done'); setStage('duplicate', 'active'); railThread.textContent = 'Confidence high — auto-proceeding…';
+    } else if (message.includes('[human_review]') && message.includes('< 75%')) {
+      setStage('review', 'waiting'); railThread.textContent = 'Paused — waiting for human review…';
+    } else if (message.includes('Human approved the extraction')) {
+      setStage('review', 'done'); setStage('duplicate', 'active'); railThread.textContent = 'Approved — continuing…';
+    } else if (message.includes('Human rejected the extraction')) {
+      setStage('review', 'done bad'); railThread.textContent = 'Rejected by human — run ended.';
+    } else if (message.startsWith('[check_duplicate] Searching')) {
+      setStage('duplicate', 'active');
+    } else if (message.includes('Duplicate found')) {
+      setStage('duplicate', 'done'); setStage('resolve', 'done dup'); railThread.textContent = 'Duplicate found — no new ticket created.';
+    } else if (message.includes('No duplicate found')) {
+      setStage('duplicate', 'done'); setStage('resolve', 'active');
+    } else if (message.startsWith('[create_ticket] Ticket created:')) {
+      setStage('resolve', 'done'); setStage('assign', 'active');
+      const key = message.split('Ticket created:')[1]?.trim();
+      railThread.textContent = key ? `Ticket ${key} created — assigning…` : 'Ticket created — assigning…';
+    } else if (message.startsWith('[route_assignee]')) {
+      setStage('assign', 'active');
+    } else if (message.includes('[update_ticket] Assignment complete')) {
+      setStage('assign', 'done'); railThread.textContent = 'Run complete.';
+    } else if (message.includes('Assignment failed')) {
+      setStage('assign', 'done bad'); railThread.textContent = 'Run complete — assignment failed.';
+    }
+  }
+
+  // ---------- Recent outcomes ----------
+  function pushOutcome(kind, keyText, summary) {
+    const card = document.createElement('div');
+    card.className = 'outcome-card';
+    const cls = kind === 'created' ? 'created' : kind === 'dup' ? 'dup' : 'rejected';
+
+    const rawKey = keyText.replace(/^[✓↺✕]\s*/, '').trim();
+    const isTicket = kind === 'created' && rawKey.length > 0;
+    const actionBtnHtml = isTicket
+      ? `<button type="button" class="ai-review-btn" onclick="openJudgeModal('${rawKey}')" title="AI Routing Audit">⚡ AI Review</button>`
+      : '';
+
+    card.innerHTML = `
+      <div>
+        <div class="outcome-key ${cls}">${keyText}</div>
+        <div class="outcome-summary">${summary || ''}</div>
+      </div>
+      ${actionBtnHtml}
+    `;
+    outcomes.prepend(card);
+    while (outcomes.children.length > 8) outcomes.removeChild(outcomes.lastChild);
+  }
+
+  // ---------- Judge Modal Handlers ----------
+  async function openJudgeModal(ticketId) {
+    const modal = document.getElementById('judge-modal');
+    const modalTicketId = document.getElementById('modal-ticket-id');
+    const modalBody = document.getElementById('modal-body');
+
+    modalTicketId.textContent = `AI Review — ${ticketId}`;
+    modalBody.innerHTML = `<div class="judge-empty">Fetching judge verdict…</div>`;
+    modal.classList.add('open');
+
+    try {
+      const res = await fetch(`/api/verdict/${encodeURIComponent(ticketId)}`);
+      const data = await res.json();
+      if (!data.found || !data.verdict) {
+        modalBody.innerHTML = `
+          <div class="judge-empty">
+            <div style="font-size:1.4rem; margin-bottom:6px;">⏳</div>
+            <div>Not yet reviewed by AI Judge.</div>
+            <div style="font-size:.72rem; color:var(--muted-2); margin-top:6px; font-family:var(--font-mono);">Evaluating ticket routing in background…</div>
+          </div>`;
+        return;
+      }
+      const v = data.verdict;
+      const scoreClass = v.score >= 80 ? 'high' : v.score >= 60 ? 'mid' : 'low';
+      const flagsHtml = (v.flags && v.flags.length > 0)
+        ? `<ul class="judge-flag-list">${v.flags.map(f => `<li>${f}</li>`).join('')}</ul>`
+        : `<div style="font-size:.78rem; color:var(--green-text); font-family:var(--font-mono);">✓ No routing anomalies or flags detected.</div>`;
+
+      modalBody.innerHTML = `
+        <div>
+          <div class="judge-sec-title">Routing Score</div>
+          <div class="judge-score-badge ${scoreClass}">
+            <span>${v.score}/100</span>
+            <span style="font-size:.72rem; font-weight:normal; color:var(--muted);">Score</span>
+          </div>
+        </div>
+        <div>
+          <div class="judge-sec-title">Human Approval Status</div>
+          <div style="font-family:var(--font-mono); font-size:.82rem; color:${v.was_human_approved ? 'var(--green-text)' : 'var(--muted)'};">
+            ${v.was_human_approved ? '✓ Human Reviewed & Approved' : '⚡ Auto-Routed (Confidence High)'}
+          </div>
+        </div>
+        <div>
+          <div class="judge-sec-title">Judge Reasoning</div>
+          <div class="judge-reasoning">${v.reasoning}</div>
+        </div>
+        <div>
+          <div class="judge-sec-title">Flags & Discrepancies</div>
+          ${flagsHtml}
+        </div>
+      `;
+    } catch (err) {
+      modalBody.innerHTML = `<div class="judge-empty" style="color:var(--red-text);">Unable to load verdict.</div>`;
+    }
+  }
+
+  function closeJudgeModal() {
+    document.getElementById('judge-modal')?.classList.remove('open');
+  }
+
+  function interpretForOutcomes(message) {
+    if (message.startsWith('[create_ticket] Ticket created:')) {
+      const key = message.split('Ticket created:')[1]?.trim();
+      pushOutcome('created', key ? `✓ ${key}` : 'Ticket created', 'New ticket created');
+    } else if (message.startsWith('[log_duplicate]')) {
+      const m = message.match(/Duplicate ticket (\S+)/);
+      pushOutcome('dup', m ? `↺ ${m[1]}` : 'Duplicate', 'Matched an existing ticket');
+    } else if (message.includes('Human rejected the extraction')) {
+      pushOutcome('rejected', '✕ Rejected', 'Discarded after human review');
+    }
+  }
+
+  // ---------- Log table ----------
+  function cell(row, text, className = '') { const td = document.createElement('td'); td.textContent = text; td.className = className; row.append(td); return td; }
+  function addLog(entry) {
+    if (logs.querySelector('.empty')) logs.replaceChildren();
+    const row = document.createElement('tr');
+    cell(row, entry.timestamp, 'log-time');
+    const level = cell(row, ''); const badge = document.createElement('span'); badge.className = `badge ${entry.level}`; badge.textContent = entry.level; level.append(badge);
+    cell(row, entry.message, 'log-message');
+    logs.prepend(row);
+    while (logs.rows.length > 200) logs.deleteRow(-1);
+    loggedCount++; logCount.textContent = `${loggedCount} event${loggedCount === 1 ? '' : 's'}`;
+    interpretForRail(entry.message);
+    interpretForOutcomes(entry.message);
+  }
+
+  const eventSource = new EventSource('/stream/logs');
+  eventSource.onopen = () => { logStatus.textContent = 'Connected'; connDot.className = 'conn-dot on'; };
+  eventSource.onerror = () => { logStatus.textContent = 'Reconnecting…'; connDot.className = 'conn-dot retry'; };
+  eventSource.onmessage = event => { try { addLog(JSON.parse(event.data)); } catch (_) {} };
+
+  // ---------- Review queue ----------
+  function band(confidence) { return confidence >= 75 ? 'band-high' : confidence >= 50 ? 'band-mid' : 'band-low'; }
+  function urgClass(urgency) { return `urg-${(urgency || '').toLowerCase()}`; }
+
+  async function decide(id, decision, payload = null) {
+    const opts = { method: 'POST' };
+    if (decision === 'approve' && payload) {
+      opts.headers = { 'Content-Type': 'application/json' };
+      opts.body = JSON.stringify(payload);
+    }
+    const response = await fetch(`/api/review/${id}/${decision}`, opts);
+    if (!response.ok) { const body = await response.json().catch(() => ({})); alert(body.detail || 'Unable to save this decision.'); return; }
+    await loadQueue();
+  }
+
+  function renderQueue(items) {
+    queue.replaceChildren();
+    queueCount.textContent = `${items.length} pending`;
+    if (!items.length) { const div = document.createElement('div'); div.className = 'empty'; div.textContent = 'No reviews waiting for a human decision.'; queue.append(div); return; }
+    for (const item of items) {
+      const b = band(item.confidence);
+      const row = document.createElement('div');
+      row.className = `queue-item ${urgClass(item.urgency)}`;
+      row.innerHTML = `
+        <div class="qi-meter">
+          <div class="qi-conf-num ${b}">${item.confidence}%</div>
+          <div class="qi-bar"><div class="qi-bar-fill ${b}" style="width:${Math.max(6, item.confidence)}%"></div></div>
+        </div>
+        <div class="qi-body">
+          <div class="qi-summary"></div>
+          <div class="qi-tags">
+            <span class="tag">${item.category}</span>
+            <span class="tag ${urgClass(item.urgency)}">${item.urgency}</span>
+          </div>
+          <div class="qi-raw"></div>
+          <div class="qi-overrides">
+            <div class="qi-field">
+              <label for="assignee-${item.id}">Assignee Override</label>
+              <input type="text" id="assignee-${item.id}" placeholder="e.g. user_acc_billing_lead" value="${item.suggested_assignee || ''}">
+            </div>
+            <div class="qi-field">
+              <label for="duedate-${item.id}">Due Date Override</label>
+              <input type="date" id="duedate-${item.id}" value="${item.due_date || ''}">
+            </div>
+          </div>
+        </div>
+        <div class="qi-actions"></div>`;
+      row.querySelector('.qi-summary').textContent = item.summary;
+      row.querySelector('.qi-raw').textContent = item.raw_text.slice(0, 220);
+      const actions = row.querySelector('.qi-actions');
+      const approveBtn = document.createElement('button'); approveBtn.type = 'button'; approveBtn.className = 'approve'; approveBtn.textContent = 'Approve';
+      approveBtn.addEventListener('click', () => {
+        const assigneeVal = document.getElementById(`assignee-${item.id}`).value.trim();
+        const dueVal = document.getElementById(`duedate-${item.id}`).value.trim();
+        decide(item.id, 'approve', { assignee: assigneeVal, due_date: dueVal });
+      });
+      const rejectBtn = document.createElement('button'); rejectBtn.type = 'button'; rejectBtn.className = 'reject'; rejectBtn.textContent = 'Reject';
+      rejectBtn.addEventListener('click', () => decide(item.id, 'reject'));
+      actions.append(approveBtn, rejectBtn);
+      queue.append(row);
+    }
+  }
+  async function loadQueue() { try { const response = await fetch('/api/review-queue'); if (response.ok) renderQueue(await response.json()); } catch (_) {} }
+
+  // ---------- Ingest form ----------
+  ingestForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    ingestButton.disabled = true; ingestButton.textContent = 'Running…';
+    ingestStatus.className = ''; ingestStatus.textContent = 'Running triage…';
+    try {
+      const response = await fetch('/api/ingest', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ raw_text: document.getElementById('raw-text').value, source_tag: document.getElementById('source-tag').value })
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.detail || 'Unable to start triage.');
+      ingestStatus.className = 'ok';
+      ingestStatus.textContent = body.status === 'pending_review' ? 'Extraction is waiting in the review queue.' : 'Triage completed.';
+      document.getElementById('raw-text').value = '';
+      await loadQueue();
+    } catch (error) {
+      ingestStatus.className = 'err'; ingestStatus.textContent = error.message;
+    } finally {
+      ingestButton.disabled = false; ingestButton.textContent = 'Start triage';
+    }
+  });
+
+  loadQueue();
+  setInterval(loadQueue, 5000);
+</script>
+</body>
+</html>

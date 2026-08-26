@@ -1,0 +1,20 @@
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+
+# Python & Virtual Environments
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Local SQLite Databases
+*.db
+*.db-journal
+*.db-wal
+
+# Vercel Build Artifacts
+.vercel/
