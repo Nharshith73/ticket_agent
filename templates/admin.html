@@ -83,7 +83,13 @@
         <div style="font-size:.8rem; color:var(--muted); margin-top:2px;">Manage team members, category assignments, calendar availability, and Jira links.</div>
       </div>
     </div>
-    <a href="/" class="back-btn">← Back to Dashboard</a>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <div id="user-profile-badge" style="font-family:var(--font-mono); font-size:.76rem; color:var(--muted); display:flex; align-items:center; gap:8px; background:var(--panel-2); border:1px solid var(--border); padding:4px 10px; border-radius:4px;">
+        <span>👤 <span id="user-email-display">user</span></span>
+        <button type="button" onclick="handleLogout()" style="font-family:var(--font-mono); font-size:.7rem; padding:3px 8px; border:1px solid var(--red-bg); background:transparent; color:var(--red-text); border-radius:3px; cursor:pointer; font-weight:normal;" onmouseover="this.style.background='var(--red-bg)'" onmouseout="this.style.background='transparent'">Logout</button>
+      </div>
+      <a href="/" class="back-btn">← Back to Dashboard</a>
+    </div>
   </header>
 
   <main class="layout">
@@ -370,6 +376,29 @@
 
   loadJiraConfig();
   loadTeam();
+
+  async function checkAuthAndLoadUser() {
+    try {
+      const res = await fetch('/api/auth/status');
+      const data = await res.json();
+      if (!data.authenticated) {
+        window.location.href = '/login';
+        return;
+      }
+      if (data.user_email) {
+        document.getElementById('user-email-display').textContent = data.user_email;
+      }
+    } catch (err) {}
+  }
+
+  async function handleLogout() {
+    try {
+      await fetch('/api/logout', { method: 'POST' });
+    } catch (err) {}
+    window.location.href = '/login';
+  }
+
+  checkAuthAndLoadUser();
 </script>
 </body>
 </html>

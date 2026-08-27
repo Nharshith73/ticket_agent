@@ -925,6 +925,10 @@
       </div>
     </div>
     <div style="display:flex; align-items:center; gap:16px;">
+      <div id="user-profile-badge" style="font-family:var(--font-mono); font-size:.76rem; color:var(--muted); display:flex; align-items:center; gap:8px; background:var(--panel-2); border:1px solid var(--border); padding:4px 10px; border-radius:4px;">
+        <span>👤 <span id="user-email-display">user</span></span>
+        <button type="button" onclick="handleLogout()" style="font-family:var(--font-mono); font-size:.7rem; padding:3px 8px; border:1px solid var(--red-bg); background:transparent; color:var(--red-text); border-radius:3px; cursor:pointer; font-weight:normal;" onmouseover="this.style.background='var(--red-bg)'" onmouseout="this.style.background='transparent'">Logout</button>
+      </div>
       <a href="/admin"
         style="font-family:var(--font-mono); font-size:.78rem; color:var(--accent-text); background:var(--accent-dim); border:1px solid var(--accent); padding:6px 14px; border-radius:4px; text-decoration:none; font-weight:600; transition:all .15s ease;"
         onmouseover="this.style.background='var(--accent)'; this.style.color='#0d1a21';"
@@ -1288,6 +1292,29 @@
 
     loadQueue();
     setInterval(loadQueue, 5000);
+
+    async function checkAuthAndLoadUser() {
+      try {
+        const res = await fetch('/api/auth/status');
+        const data = await res.json();
+        if (!data.authenticated) {
+          window.location.href = '/login';
+          return;
+        }
+        if (data.user_email) {
+          document.getElementById('user-email-display').textContent = data.user_email;
+        }
+      } catch (err) {}
+    }
+
+    async function handleLogout() {
+      try {
+        await fetch('/api/logout', { method: 'POST' });
+      } catch (err) {}
+      window.location.href = '/login';
+    }
+
+    checkAuthAndLoadUser();
   </script>
 </body>
 

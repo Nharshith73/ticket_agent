@@ -4,7 +4,7 @@ import json
 import os
 import sqlite3
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 
@@ -124,6 +124,16 @@ def init_db() -> None:
                 user_email TEXT NOT NULL,
                 api_token TEXT NOT NULL,
                 updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_sessions (
+                session_id TEXT PRIMARY KEY,
+                user_email TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL
             )
             """
         )
@@ -473,6 +483,54 @@ def save_jira_config(
         )
         row = conn.execute("SELECT * FROM jira_config WHERE id = 1").fetchone()
         return dict(row) if row else {}
+
+
+# --- Session Management Helpers ---
+
+def create_session(user_email: str, duration_days: int = 30) -> str:
+    """Create a persistent user session in SQLite database and return session ID."""
+    session_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    created_at = now.isoformat()
+    expires_at = (now + timedelta(days=duration_days)).isoformat()
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO user_sessions (session_id, user_email, created_at, expires_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (session_id, user_email.strip().lower(), created_at, expires_at),
+        )
+    return session_id
+
+
+def get_session(session_id: str) -> dict | None:
+    """Fetch valid, non-expired user session by session ID."""
+    if not session_id:
+        return None
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM user_sessions WHERE session_id = ?", (session_id,)
+        ).fetchone()
+    if not row:
+        return None
+    data = dict(row)
+    try:
+        exp = datetime.fromisoformat(data["expires_at"])
+        if datetime.now(timezone.utc) > exp:
+            delete_session(session_id)
+            return None
+    except Exception:
+        pass
+    return data
+
+
+def delete_session(session_id: str) -> None:
+    """Delete a user session from SQLite database."""
+    if not session_id:
+        return
+    with _connect() as conn:
+        conn.execute("DELETE FROM user_sessions WHERE session_id = ?", (session_id,))
 
 
 init_db()

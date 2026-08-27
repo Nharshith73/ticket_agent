@@ -4,14 +4,16 @@ import json
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from langgraph.types import Command
 from pydantic import BaseModel, Field
 
 from database import (
     add_team_member,
+    create_session,
+    delete_session,
     delete_team_member,
     get_all_team_members,
     get_jira_config,
@@ -21,6 +23,7 @@ from database import (
     get_recent_logs,
     get_review_by_id,
     get_review_by_thread_id,
+    get_session,
     reset_review_status_to_pending,
     save_jira_config,
     set_member_availability,
@@ -30,6 +33,7 @@ from graph import app as graph_app
 from log_utils import emit_log, stream_log_events
 from nodes import jira_client as jira_service
 
+LOGIN_TEMPLATE_PATH = Path(__file__).with_name("templates") / "login.html"
 ADMIN_TEMPLATE_PATH = Path(__file__).with_name("templates") / "admin.html"
 TEMPLATE_PATH = Path(__file__).with_name("templates") / "index.html"
 app = FastAPI(title="Support Ticket Triage Dashboard")
@@ -70,8 +74,101 @@ def _initial_state(raw_text: str, source_tag: str, thread_id: str) -> dict:
     }
 
 
+def _get_current_session(request: Request) -> Optional[dict]:
+    token = request.cookies.get("session_token")
+    if not token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:].strip()
+    return get_session(token) if token else None
+
+
+class LoginRequest(BaseModel):
+    quick_login: Optional[bool] = False
+    jira_url: Optional[str] = None
+    project_key: Optional[str] = None
+    user_email: Optional[str] = None
+    api_token: Optional[str] = None
+
+
+@app.get("/login", include_in_schema=False)
+async def login_page(request: Request):
+    if not LOGIN_TEMPLATE_PATH.exists():
+        raise HTTPException(status_code=404, detail="Login template not found")
+    sess = _get_current_session(request)
+    if sess:
+        return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+    return FileResponse(LOGIN_TEMPLATE_PATH, media_type="text/html")
+
+
+@app.get("/api/auth/status")
+async def auth_status(request: Request) -> dict:
+    sess = _get_current_session(request)
+    jira_service.reload()
+    config = get_jira_config() or {}
+    user_email = sess["user_email"] if sess else config.get("user_email")
+    return {
+        "authenticated": bool(sess),
+        "user_email": user_email,
+        "is_configured": jira_service.is_configured,
+        "jira_url": jira_service.jira_url,
+        "project_key": jira_service.project_key,
+    }
+
+
+@app.post("/api/login")
+async def login_endpoint(req: LoginRequest, response: Response) -> dict:
+    if req.quick_login:
+        config = get_jira_config()
+        if not config or not config.get("user_email"):
+            raise HTTPException(status_code=400, detail="No saved Jira credentials found. Please enter your Jira details.")
+        jira_service.reload()
+        if not jira_service.is_configured:
+            raise HTTPException(status_code=400, detail="Saved Jira credentials failed to authenticate.")
+        session_id = create_session(config["user_email"])
+        response.set_cookie(key="session_token", value=session_id, httponly=True, max_age=30*86400, samesite="lax")
+        emit_log(f"[auth] User {config['user_email']} logged in via saved credentials.")
+        return {"success": True, "message": "Quick login successful", "user_email": config["user_email"]}
+
+    if not req.jira_url or not req.project_key or not req.user_email or not req.api_token:
+        raise HTTPException(status_code=400, detail="Missing required Jira credential fields.")
+
+    save_jira_config(
+        jira_url=req.jira_url,
+        project_key=req.project_key,
+        user_email=req.user_email,
+        api_token=req.api_token,
+    )
+    jira_service.reload()
+    if not jira_service.is_configured or not jira_service.my_account_id:
+        emit_log(f"[auth warning] Login failed for {req.user_email} at {req.jira_url}", "warning")
+        raise HTTPException(status_code=401, detail="Could not authenticate with Jira. Check your URL, email, or API token.")
+
+    session_id = create_session(req.user_email)
+    response.set_cookie(key="session_token", value=session_id, httponly=True, max_age=30*86400, samesite="lax")
+    emit_log(f"[auth] User {req.user_email} authenticated successfully and created session.")
+    return {
+        "success": True,
+        "message": f"Successfully connected as {req.user_email}!",
+        "user_email": req.user_email,
+        "project_key": req.project_key,
+    }
+
+
+@app.post("/api/logout")
+async def logout_endpoint(request: Request, response: Response) -> dict:
+    sess_id = request.cookies.get("session_token")
+    if sess_id:
+        delete_session(sess_id)
+    response.delete_cookie(key="session_token")
+    return {"success": True, "message": "Logged out successfully"}
+
+
 @app.get("/", include_in_schema=False)
-async def dashboard() -> FileResponse:
+async def dashboard(request: Request):
+    sess = _get_current_session(request)
+    if not sess:
+        return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
     return FileResponse(TEMPLATE_PATH, media_type="text/html")
 
 
@@ -206,7 +303,10 @@ async def ingest(request: IngestRequest) -> dict:
 
 
 @app.get("/admin", include_in_schema=False)
-async def admin_dashboard() -> FileResponse:
+async def admin_dashboard(request: Request):
+    sess = _get_current_session(request)
+    if not sess:
+        return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
     if not ADMIN_TEMPLATE_PATH.exists():
         raise HTTPException(status_code=status.HTTP_444_NOT_FOUND if hasattr(status, 'HTTP_444_NOT_FOUND') else 404, detail="Admin template not found")
     return FileResponse(ADMIN_TEMPLATE_PATH, media_type="text/html")
