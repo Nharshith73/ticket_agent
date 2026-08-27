@@ -12,7 +12,9 @@ from pydantic import BaseModel, Field
 
 from database import (
     add_team_member,
+    authenticate_user,
     create_session,
+    create_user,
     delete_session,
     delete_team_member,
     get_all_team_members,
@@ -24,6 +26,7 @@ from database import (
     get_review_by_id,
     get_review_by_thread_id,
     get_session,
+    get_user_by_username,
     reset_review_status_to_pending,
     save_jira_config,
     set_member_availability,
@@ -84,11 +87,14 @@ def _get_current_session(request: Request) -> Optional[dict]:
 
 
 class LoginRequest(BaseModel):
-    quick_login: Optional[bool] = False
-    jira_url: Optional[str] = None
-    project_key: Optional[str] = None
-    user_email: Optional[str] = None
-    api_token: Optional[str] = None
+    username: str = Field(min_length=1)
+    password: str = Field(min_length=1)
+
+
+class RegisterRequest(BaseModel):
+    username: str = Field(min_length=1)
+    password: str = Field(min_length=4)
+    confirm_password: str = Field(min_length=4)
 
 
 @app.get("/login", include_in_schema=False)
@@ -97,7 +103,7 @@ async def login_page(request: Request):
         raise HTTPException(status_code=404, detail="Login template not found")
     sess = _get_current_session(request)
     if sess:
-        return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+        return RedirectResponse(url="/admin", status_code=status.HTTP_302_FOUND)
     return FileResponse(LOGIN_TEMPLATE_PATH, media_type="text/html")
 
 
@@ -116,42 +122,41 @@ async def auth_status(request: Request) -> dict:
     }
 
 
-@app.post("/api/login")
-async def login_endpoint(req: LoginRequest, response: Response) -> dict:
-    if req.quick_login:
-        config = get_jira_config()
-        if not config or not config.get("user_email"):
-            raise HTTPException(status_code=400, detail="No saved Jira credentials found. Please enter your Jira details.")
-        jira_service.reload()
-        if not jira_service.is_configured:
-            raise HTTPException(status_code=400, detail="Saved Jira credentials failed to authenticate.")
-        session_id = create_session(config["user_email"])
-        response.set_cookie(key="session_token", value=session_id, httponly=True, max_age=30*86400, samesite="lax")
-        emit_log(f"[auth] User {config['user_email']} logged in via saved credentials.")
-        return {"success": True, "message": "Quick login successful", "user_email": config["user_email"]}
+@app.post("/api/register")
+async def register_endpoint(req: RegisterRequest, response: Response) -> dict:
+    if req.password != req.confirm_password:
+        raise HTTPException(status_code=422, detail="Passwords do not match")
+    try:
+        user = create_user(req.username, req.password)
+    except ValueError as val_err:
+        raise HTTPException(status_code=400, detail=str(val_err)) from val_err
 
-    if not req.jira_url or not req.project_key or not req.user_email or not req.api_token:
-        raise HTTPException(status_code=400, detail="Missing required Jira credential fields.")
-
-    save_jira_config(
-        jira_url=req.jira_url,
-        project_key=req.project_key,
-        user_email=req.user_email,
-        api_token=req.api_token,
-    )
-    jira_service.reload()
-    if not jira_service.is_configured or not jira_service.my_account_id:
-        emit_log(f"[auth warning] Login failed for {req.user_email} at {req.jira_url}", "warning")
-        raise HTTPException(status_code=401, detail="Could not authenticate with Jira. Check your URL, email, or API token.")
-
-    session_id = create_session(req.user_email)
+    session_id = create_session(user["username"])
     response.set_cookie(key="session_token", value=session_id, httponly=True, max_age=30*86400, samesite="lax")
-    emit_log(f"[auth] User {req.user_email} authenticated successfully and created session.")
+    emit_log(f"[auth] Created account for user {user['username']}.")
     return {
         "success": True,
-        "message": f"Successfully connected as {req.user_email}!",
-        "user_email": req.user_email,
-        "project_key": req.project_key,
+        "message": f"Account created successfully!",
+        "user_email": user["username"],
+        "redirect": "/admin",
+    }
+
+
+@app.post("/api/login")
+async def login_endpoint(req: LoginRequest, response: Response) -> dict:
+    user = authenticate_user(req.username, req.password)
+    if not user:
+        emit_log(f"[auth warning] Failed login attempt for '{req.username}'", "warning")
+        raise HTTPException(status_code=401, detail="Invalid email/username or password")
+
+    session_id = create_session(user["username"])
+    response.set_cookie(key="session_token", value=session_id, httponly=True, max_age=30*86400, samesite="lax")
+    emit_log(f"[auth] User {user['username']} logged in successfully.")
+    return {
+        "success": True,
+        "message": f"Welcome back!",
+        "user_email": user["username"],
+        "redirect": "/admin",
     }
 
 

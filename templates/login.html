@@ -1,398 +1,367 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Login — Support Ticket Triage Portal</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
-  :root {
-    color-scheme: dark;
-    --bg: #15130f;
-    --panel: #1c1912;
-    --panel-2: #221e15;
-    --border: #332c1e;
-    --border-soft: #241f16;
-    --text: #eee6d6;
-    --muted: #a89a80;
-    --muted-2: #6b6152;
-    --accent: #4f7896;
-    --accent-dim: #182833;
-    --accent-text: #9dc3dc;
-    --red: #c0392b;
-    --red-bg: #241512;
-    --red-text: #e08074;
-    --green: #5a7d52;
-    --green-bg: #171f14;
-    --green-text: #93b487;
-    --font-display: 'IBM Plex Sans', system-ui, sans-serif;
-    --font-body: 'Inter', system-ui, sans-serif;
-    --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--font-body);
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-  }
-  .login-card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    width: 100%;
-    max-width: 440px;
-    box-shadow: 0 16px 36px rgba(0,0,0,0.6);
-    overflow: hidden;
-    animation: fadeIn 0.3s ease-out;
-  }
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  .header-banner {
-    padding: 24px 28px;
-    background: var(--panel-2);
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: 14px;
-  }
-  .brand-mark {
-    width: 42px;
-    height: 42px;
-    border-radius: 4px;
-    background: var(--accent-dim);
-    border: 1px solid var(--accent);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: var(--font-mono);
-    font-weight: 700;
-    color: var(--accent-text);
-    font-size: 1rem;
-    flex-shrink: 0;
-  }
-  .header-text h1 {
-    font-family: var(--font-display);
-    font-size: 1.15rem;
-    font-weight: 600;
-    margin: 0;
-  }
-  .header-text p {
-    font-size: 0.8rem;
-    color: var(--muted);
-    margin: 3px 0 0;
-  }
-  .card-body {
-    padding: 24px 28px;
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-  }
-  
-  /* Quick Login Box */
-  .quick-box {
-    background: var(--panel-2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-  .quick-user {
-    font-family: var(--font-mono);
-    font-size: 0.84rem;
-    color: var(--text);
-    word-break: break-all;
-  }
-  .quick-badge {
-    display: inline-block;
-    font-size: 0.7rem;
-    font-family: var(--font-mono);
-    padding: 2px 6px;
-    border-radius: 3px;
-    background: var(--green-bg);
-    color: var(--green-text);
-    border: 1px solid var(--green);
-    margin-left: 6px;
-  }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Authentication — Support Ticket Triage</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #15130f;
+      --panel: #1c1912;
+      --panel-2: #242018;
+      --border: #2a241b;
+      --border-focus: #4a4032;
+      --accent: #4f7896;
+      --accent-hover: #3b5f78;
+      --text: #e6dfd5;
+      --muted: #8c8273;
+      --muted-2: #595246;
+      --green-bg: #16291e;
+      --green-border: #234832;
+      --green-text: #6ec08a;
+      --red-bg: #2d1818;
+      --red-border: #4d2626;
+      --red-text: #e07272;
+      --font-main: 'IBM Plex Sans', -apple-system, sans-serif;
+      --font-mono: 'IBM Plex Mono', monospace;
+    }
 
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .field label {
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-  input {
-    font-family: var(--font-mono);
-    font-size: 0.85rem;
-    background: var(--panel-2);
-    border: 1px solid var(--border);
-    color: var(--text);
-    padding: 10px 12px;
-    border-radius: 4px;
-    transition: border-color 0.15s ease;
-  }
-  input:focus {
-    outline: none;
-    border-color: var(--accent);
-  }
-  input::placeholder {
-    color: var(--muted-2);
-  }
-  .btn {
-    cursor: pointer;
-    font-family: var(--font-body);
-    font-weight: 600;
-    font-size: 0.88rem;
-    padding: 11px 16px;
-    border-radius: 4px;
-    border: 1px solid var(--accent);
-    background: var(--accent-dim);
-    color: var(--accent-text);
-    transition: all 0.15s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    width: 100%;
-    margin-top: 4px;
-  }
-  .btn:hover {
-    background: var(--accent);
-    color: #0d1a21;
-  }
-  .btn:disabled {
-    opacity: 0.5;
-    cursor: wait;
-  }
-  .status-msg {
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
-    min-height: 1.2em;
-    padding: 8px 12px;
-    border-radius: 4px;
-    display: none;
-  }
-  .status-msg.ok {
-    display: block;
-    background: var(--green-bg);
-    color: var(--green-text);
-    border: 1px solid var(--green);
-  }
-  .status-msg.err {
-    display: block;
-    background: var(--red-bg);
-    color: var(--red-text);
-    border: 1px solid var(--red);
-  }
-  .toggle-link {
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    color: var(--muted);
-    text-align: center;
-    cursor: pointer;
-    text-decoration: underline;
-    margin-top: 4px;
-  }
-  .toggle-link:hover {
-    color: var(--accent-text);
-  }
-</style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font-main);
+      display: flex;
+      min-height: 100vh;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .auth-card {
+      width: 100%;
+      max-width: 420px;
+      padding: 36px 32px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
+    }
+
+    .brand-header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+
+    .brand-logo {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      height: 44px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-family: var(--font-mono);
+      font-weight: 600;
+      font-size: 1.1rem;
+      color: var(--accent);
+      margin-bottom: 12px;
+    }
+
+    .brand-title {
+      font-size: 1.35rem;
+      font-weight: 600;
+      margin: 0 0 6px 0;
+      color: var(--text);
+      letter-spacing: -0.01em;
+    }
+
+    .brand-sub {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin: 0;
+    }
+
+    /* Tabs */
+    .tabs-nav {
+      display: flex;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 3px;
+      margin-bottom: 24px;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 9px 12px;
+      background: transparent;
+      border: none;
+      border-radius: 4px;
+      color: var(--muted);
+      font-family: var(--font-main);
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .tab-btn.active {
+      background: var(--panel);
+      color: var(--text);
+      font-weight: 600;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+    }
+
+    /* Form Fields */
+    .auth-form {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    label {
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    input[type="text"],
+    input[type="email"],
+    input[type="password"] {
+      width: 100%;
+      padding: 10px 12px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      color: var(--text);
+      font-family: var(--font-main);
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.15s ease;
+    }
+
+    input:focus {
+      border-color: var(--accent);
+    }
+
+    .btn-submit {
+      margin-top: 8px;
+      padding: 11px 16px;
+      background: var(--accent);
+      border: none;
+      border-radius: 5px;
+      color: #ffffff;
+      font-family: var(--font-main);
+      font-size: 0.92rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+
+    .btn-submit:hover {
+      background: var(--accent-hover);
+    }
+
+    .btn-submit:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    /* Status Messages */
+    .status-msg {
+      display: none;
+      padding: 10px 12px;
+      border-radius: 5px;
+      font-size: 0.85rem;
+      line-height: 1.4;
+    }
+
+    .status-msg.err {
+      display: block;
+      background: var(--red-bg);
+      border: 1px solid var(--red-border);
+      color: var(--red-text);
+    }
+
+    .status-msg.ok {
+      display: block;
+      background: var(--green-bg);
+      border: 1px solid var(--green-border);
+      color: var(--green-text);
+    }
+  </style>
 </head>
 <body>
 
-<div class="login-card">
-  <div class="header-banner">
-    <div class="brand-mark">TR</div>
-    <div class="header-text">
-      <h1>Support Ticket Triage</h1>
-      <p>Sign in to your Jira Workspace session</p>
-    </div>
-  </div>
-
-  <div class="card-body">
-    <!-- Quick Login Section (Rendered if stored Jira config exists) -->
-    <div id="quick-login-section" style="display:none;" class="quick-box">
-      <div style="font-size:0.75rem; color:var(--muted); font-family:var(--font-mono);">SAVED JIRA CREDENTIALS FOUND</div>
-      <div class="quick-user">
-        <span id="quick-email">user@domain.com</span>
-        <span class="quick-badge" id="quick-project">FA</span>
-      </div>
-      <button type="button" class="btn" id="quick-login-btn">
-        Log In & Continue →
-      </button>
-      <div class="toggle-link" id="show-full-form-btn">Use different Jira credentials / update API key</div>
+  <div class="auth-card">
+    <div class="brand-header">
+      <div class="brand-logo">TR</div>
+      <h1 class="brand-title">Support Ticket Triage</h1>
+      <p class="brand-sub">Sign in to access your triage workspace</p>
     </div>
 
-    <!-- Full Credential Login Form -->
-    <form id="login-form">
-      <div class="field">
-        <label for="jira_url">Jira Domain URL</label>
-        <input type="url" id="jira_url" required placeholder="https://yourdomain.atlassian.net">
+    <!-- Toggleable Tabs -->
+    <div class="tabs-nav">
+      <button type="button" class="tab-btn active" id="tab-login-btn" onclick="switchTab('login')">Login</button>
+      <button type="button" class="tab-btn" id="tab-register-btn" onclick="switchTab('register')">Create Account</button>
+    </div>
+
+    <div id="status-box" class="status-msg"></div>
+
+    <!-- Login Form -->
+    <form id="login-form" class="auth-form">
+      <div class="form-group">
+        <label for="login-username">Email / Username</label>
+        <input type="text" id="login-username" required placeholder="name@company.com or username" autocomplete="username" />
       </div>
-      <div class="field">
-        <label for="project_key">Jira Project Key</label>
-        <input type="text" id="project_key" required placeholder="e.g. KAN or FA" style="text-transform:uppercase;">
+
+      <div class="form-group">
+        <label for="login-password">Password</label>
+        <input type="password" id="login-password" required placeholder="••••••••" autocomplete="current-password" />
       </div>
-      <div class="field">
-        <label for="user_email">Jira Account Email</label>
-        <input type="email" id="user_email" required placeholder="you@company.com">
-      </div>
-      <div class="field">
-        <label for="api_token">Atlassian API Token</label>
-        <input type="password" id="api_token" required placeholder="Paste Atlassian API Token">
-      </div>
-      <button type="submit" class="btn" id="submit-btn">
-        Connect & Sign In
-      </button>
-      <div class="toggle-link" id="cancel-custom-form-btn" style="display:none;">Back to Quick Login</div>
+
+      <button type="submit" id="login-submit-btn" class="btn-submit">Sign In</button>
     </form>
 
-    <div id="status-msg" class="status-msg"></div>
+    <!-- Create Account Form -->
+    <form id="register-form" class="auth-form" style="display: none;">
+      <div class="form-group">
+        <label for="reg-username">Email / Username</label>
+        <input type="text" id="reg-username" required placeholder="name@company.com or username" autocomplete="username" />
+      </div>
+
+      <div class="form-group">
+        <label for="reg-password">Password</label>
+        <input type="password" id="reg-password" required minlength="4" placeholder="••••••••" autocomplete="new-password" />
+      </div>
+
+      <div class="form-group">
+        <label for="reg-confirm-password">Confirm Password</label>
+        <input type="password" id="reg-confirm-password" required minlength="4" placeholder="••••••••" autocomplete="new-password" />
+      </div>
+
+      <button type="submit" id="register-submit-btn" class="btn-submit">Create Account</button>
+    </form>
   </div>
-</div>
 
-<script>
-  const quickSection = document.getElementById('quick-login-section');
-  const loginForm = document.getElementById('login-form');
-  const quickBtn = document.getElementById('quick-login-btn');
-  const submitBtn = document.getElementById('submit-btn');
-  const statusMsg = document.getElementById('status-msg');
-  const showFullFormBtn = document.getElementById('show-full-form-btn');
-  const cancelCustomFormBtn = document.getElementById('cancel-custom-form-btn');
+  <script>
+    const statusBox = document.getElementById('status-box');
+    const loginForm = document.getElementById('login-form');
+    const registerForm = document.getElementById('register-form');
+    const tabLoginBtn = document.getElementById('tab-login-btn');
+    const tabRegisterBtn = document.getElementById('tab-register-btn');
 
-  // Check auth status on load
-  async function checkInitialState() {
-    try {
-      const res = await fetch('/api/auth/status');
-      const data = await res.json();
-      
-      if (data.authenticated) {
-        // User already authenticated -> redirect to dashboard
-        window.location.href = '/';
+    function switchTab(tab) {
+      statusBox.style.display = 'none';
+      if (tab === 'login') {
+        tabLoginBtn.classList.add('active');
+        tabRegisterBtn.classList.remove('active');
+        loginForm.style.display = 'flex';
+        registerForm.style.display = 'none';
+      } else {
+        tabRegisterBtn.classList.add('active');
+        tabLoginBtn.classList.remove('active');
+        registerForm.style.display = 'flex';
+        loginForm.style.display = 'none';
+      }
+    }
+
+    function showStatus(msg, isError = true) {
+      statusBox.className = isError ? 'status-msg err' : 'status-msg ok';
+      statusBox.textContent = msg;
+    }
+
+    // Login Form Submit
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('login-submit-btn');
+      btn.disabled = true;
+      btn.textContent = 'Signing in…';
+      statusBox.style.display = 'none';
+
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: document.getElementById('login-username').value.trim(),
+            password: document.getElementById('login-password').value,
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.detail || 'Login failed.');
+        }
+
+        showStatus('✓ Login successful! Redirecting…', false);
+        setTimeout(() => {
+          window.location.href = data.redirect || '/admin';
+        }, 400);
+      } catch (err) {
+        showStatus(err.message, true);
+        btn.disabled = false;
+        btn.textContent = 'Sign In';
+      }
+    });
+
+    // Create Account Form Submit
+    registerForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const pass = document.getElementById('reg-password').value;
+      const confirmPass = document.getElementById('reg-confirm-password').value;
+
+      if (pass !== confirmPass) {
+        showStatus('Passwords do not match.', true);
         return;
       }
 
-      if (data.is_configured && data.user_email) {
-        // Show Quick Login box
-        document.getElementById('quick-email').textContent = data.user_email;
-        document.getElementById('quick-project').textContent = data.project_key || 'JIRA';
-        document.getElementById('jira_url').value = data.jira_url || '';
-        document.getElementById('project_key').value = data.project_key || '';
-        document.getElementById('user_email').value = data.user_email || '';
-        
-        quickSection.style.display = 'flex';
-        loginForm.style.display = 'none';
-      } else {
-        quickSection.style.display = 'none';
-        loginForm.style.display = 'flex';
+      const btn = document.getElementById('register-submit-btn');
+      btn.disabled = true;
+      btn.textContent = 'Creating account…';
+      statusBox.style.display = 'none';
+
+      try {
+        const res = await fetch('/api/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: document.getElementById('reg-username').value.trim(),
+            password: pass,
+            confirm_password: confirmPass,
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.detail || 'Account creation failed.');
+        }
+
+        showStatus('✓ Account created! Redirecting to Admin Dashboard…', false);
+        setTimeout(() => {
+          window.location.href = data.redirect || '/admin';
+        }, 500);
+      } catch (err) {
+        showStatus(err.message, true);
+        btn.disabled = false;
+        btn.textContent = 'Create Account';
       }
-    } catch (err) {
-      loginForm.style.display = 'flex';
-    }
-  }
-
-  showFullFormBtn.addEventListener('click', () => {
-    quickSection.style.display = 'none';
-    loginForm.style.display = 'flex';
-    cancelCustomFormBtn.style.display = 'block';
-  });
-
-  cancelCustomFormBtn.addEventListener('click', () => {
-    loginForm.style.display = 'none';
-    quickSection.style.display = 'flex';
-  });
-
-  // Quick Login execution
-  quickBtn.addEventListener('click', async () => {
-    quickBtn.disabled = true;
-    quickBtn.textContent = 'Signing in…';
-    showStatus('', '');
-
-    try {
-      const res = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quick_login: true })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        showStatus('✓ Login successful! Redirecting…', 'ok');
-        setTimeout(() => { window.location.href = '/'; }, 600);
-      } else {
-        showStatus(data.detail || data.message || 'Quick login failed.', 'err');
-        quickSection.style.display = 'none';
-        loginForm.style.display = 'flex';
-      }
-    } catch (err) {
-      showStatus('Login request failed: ' + err.message, 'err');
-    } finally {
-      quickBtn.disabled = false;
-      quickBtn.textContent = 'Log In & Continue →';
-    }
-  });
-
-  // Full Credential Login form submission
-  loginForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Authenticating with Jira…';
-    showStatus('', '');
-
-    const payload = {
-      jira_url: document.getElementById('jira_url').value.trim(),
-      project_key: document.getElementById('project_key').value.trim(),
-      user_email: document.getElementById('user_email').value.trim(),
-      api_token: document.getElementById('api_token').value.trim()
-    };
-
-    try {
-      const res = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        showStatus('✓ Successfully authenticated! Redirecting…', 'ok');
-        setTimeout(() => { window.location.href = '/'; }, 600);
-      } else {
-        showStatus(data.detail || data.message || 'Unable to authenticate with Jira.', 'err');
-      }
-    } catch (err) {
-      showStatus('Connection error: ' + err.message, 'err');
-    } finally {
-      submitBtn.disabled = false;
-      submitBtn.textContent = 'Connect & Sign In';
-    }
-  });
-
-  function showStatus(msg, type) {
-    if (!msg) {
-      statusMsg.style.display = 'none';
-      return;
-    }
-    statusMsg.className = 'status-msg ' + type;
-    statusMsg.textContent = msg;
-  }
-
-  checkInitialState();
-</script>
+    });
+  </script>
 </body>
 </html>

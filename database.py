@@ -4,6 +4,8 @@ import json
 import os
 import sqlite3
 import uuid
+import hashlib
+import secrets
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -134,6 +136,16 @@ def init_db() -> None:
                 user_email TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 expires_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY,
+                username TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL
             )
             """
         )
@@ -531,6 +543,84 @@ def delete_session(session_id: str) -> None:
         return
     with _connect() as conn:
         conn.execute("DELETE FROM user_sessions WHERE session_id = ?", (session_id,))
+
+
+# --- User Accounts Helpers ---
+
+def hash_password(password: str) -> str:
+    """Hash password using PBKDF2-HMAC-SHA256 with random salt."""
+    salt = secrets.token_hex(16)
+    pw_hash = hashlib.pbkdf2_hmac(
+        'sha256',
+        password.encode('utf-8'),
+        salt.encode('utf-8'),
+        100000
+    ).hex()
+    return f"{salt}${pw_hash}"
+
+
+def verify_password(password: str, stored_hash: str) -> bool:
+    """Verify password against stored salt$hash."""
+    try:
+        salt, pw_hash = stored_hash.split("$", 1)
+        calc_hash = hashlib.pbkdf2_hmac(
+            'sha256',
+            password.encode('utf-8'),
+            salt.encode('utf-8'),
+            100000
+        ).hex()
+        return secrets.compare_digest(calc_hash, pw_hash)
+    except Exception:
+        return False
+
+
+def create_user(username: str, password: str) -> dict:
+    """Create a new user account."""
+    clean_username = username.strip().lower()
+    if not clean_username:
+        raise ValueError("Email or Username is required")
+    if len(password) < 4:
+        raise ValueError("Password must be at least 4 characters")
+
+    user_id = str(uuid.uuid4())
+    pw_hash = hash_password(password)
+    created_at = datetime.now(timezone.utc).isoformat()
+
+    with _connect() as conn:
+        try:
+            conn.execute(
+                """
+                INSERT INTO users (id, username, password_hash, created_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (user_id, clean_username, pw_hash, created_at),
+            )
+        except sqlite3.IntegrityError:
+            raise ValueError("An account with this email/username already exists")
+
+        row = conn.execute("SELECT id, username, created_at FROM users WHERE id = ?", (user_id,)).fetchone()
+        return dict(row) if row else {}
+
+
+def authenticate_user(username: str, password: str) -> dict | None:
+    """Authenticate username/email and password, returning user dict if valid."""
+    clean_username = username.strip().lower()
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM users WHERE username = ?", (clean_username,)).fetchone()
+    if not row:
+        return None
+    user_dict = dict(row)
+    if verify_password(password, user_dict["password_hash"]):
+        return {"id": user_dict["id"], "username": user_dict["username"], "created_at": user_dict["created_at"]}
+    return None
+
+
+def get_user_by_username(username: str) -> dict | None:
+    """Fetch user record by username/email."""
+    clean_username = username.strip().lower()
+    with _connect() as conn:
+        row = conn.execute("SELECT id, username, created_at FROM users WHERE username = ?", (clean_username,)).fetchone()
+    return dict(row) if row else None
 
 
 init_db()
