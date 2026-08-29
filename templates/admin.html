@@ -262,13 +262,14 @@
   });
 
   async function loadTeam() {
+    rosterBody.innerHTML = `<tr><td colspan="5" class="empty" style="color:var(--muted);">⏳ Loading team members & active workloads…</td></tr>`;
     try {
       const res = await fetch('/api/team');
       if (!res.ok) throw new Error('Failed to load team roster.');
       const members = await res.json();
       renderRoster(members);
     } catch (err) {
-      rosterBody.innerHTML = `<tr><td colspan="5" class="empty" style="color:var(--red-text);">${err.message}</td></tr>`;
+      rosterBody.innerHTML = `<tr><td colspan="5" class="empty" style="color:var(--red-text);">⚠️ ${escapeHtml(err.message)}</td></tr>`;
     }
   }
 
@@ -279,15 +280,17 @@
     }
 
     rosterBody.innerHTML = members.map(m => {
+      const category = m.primary_category || 'other';
       const avail = m.availability || 'available';
+      const ticketCount = typeof m.open_ticket_count === 'number' ? m.open_ticket_count : 0;
       return `
         <tr>
           <td>
-            <div style="font-weight:600;">${escapeHtml(m.name)}</div>
-            <div class="jira-id">${escapeHtml(m.email)}</div>
+            <div style="font-weight:600;">${escapeHtml(m.name || 'Unnamed')}</div>
+            <div class="jira-id">${escapeHtml(m.email || '')}</div>
             <div class="jira-id" style="font-size:.66rem;">Jira ID: ${escapeHtml(m.jira_account_id || 'Not Linked')}</div>
           </td>
-          <td><span class="badge cat">${escapeHtml(m.primary_category)}</span></td>
+          <td><span class="badge cat">${escapeHtml(category)}</span></td>
           <td>
             <select style="font-size:.74rem; padding:4px 6px;" onchange="updateAvailability('${escapeHtml(m.email)}', this.value)">
               <option value="available" ${avail === 'available' ? 'selected' : ''}>🟢 Available</option>
@@ -296,7 +299,7 @@
             </select>
           </td>
           <td>
-            <span class="workload-pill">${m.open_ticket_count || 0} active</span>
+            <span class="workload-pill">${ticketCount} active</span>
           </td>
           <td>
             <button type="button" class="btn-danger" onclick="deleteMember('${m.id}')">Delete</button>

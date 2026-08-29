@@ -211,7 +211,7 @@ class JiraClient:
             payload = {
                 "jql": f'assignee = "{target_id}" AND statusCategory != Done'
             }
-            response = requests.post(url, json=payload, headers=self.headers, timeout=10)
+            response = requests.post(url, json=payload, headers=self.headers, timeout=2)
             if response.status_code == 200:
                 data = response.json()
                 total = data.get("total")
