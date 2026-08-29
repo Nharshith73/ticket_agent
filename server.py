@@ -340,6 +340,7 @@ class JiraConfigRequest(BaseModel):
 
 
 @app.get("/api/jira-config")
+@app.get("/jira/status")
 async def fetch_jira_config() -> dict:
     """Return current active Jira configuration status."""
     jira_service.reload()
@@ -350,7 +351,7 @@ async def fetch_jira_config() -> dict:
         masked_token = tok[:6] + "..." + tok[-4:] if len(tok) > 10 else "***"
     
     return {
-        "is_configured": jira_service.is_configured,
+        "is_configured": jira_service.is_configured and bool(jira_service.my_account_id),
         "my_account_id": jira_service.my_account_id,
         "jira_url": jira_service.jira_url,
         "project_key": jira_service.project_key,
@@ -360,9 +361,10 @@ async def fetch_jira_config() -> dict:
 
 
 @app.post("/api/jira-config")
+@app.post("/jira/config")
 async def update_jira_config(req: JiraConfigRequest) -> dict:
     """Save new Jira credentials dynamically and re-test connection."""
-    record = save_jira_config(
+    save_jira_config(
         jira_url=req.jira_url,
         project_key=req.project_key,
         user_email=req.user_email,
@@ -373,15 +375,15 @@ async def update_jira_config(req: JiraConfigRequest) -> dict:
         emit_log(f"[admin warning] Failed to authenticate with Jira using email '{req.user_email}' at '{req.jira_url}'", "warning")
         return {
             "success": False,
-            "message": "Saved credentials, but could not authenticate with Jira. Check your URL, email, or API token.",
-            "is_configured": jira_service.is_configured,
+            "message": "Saved credentials to database, but could not authenticate with Jira Cloud API. Please verify URL, email, and API token.",
+            "is_configured": False,
             "my_account_id": None,
         }
 
     emit_log(f"[admin] Dynamic Jira connection updated! Connected as Account ID: {jira_service.my_account_id} for project '{req.project_key}'")
     return {
         "success": True,
-        "message": f"Successfully connected to Jira! Account ID: {jira_service.my_account_id}",
+        "message": f"Successfully authenticated with Jira Cloud! Connected as Account ID: {jira_service.my_account_id}",
         "is_configured": True,
         "my_account_id": jira_service.my_account_id,
         "project_key": req.project_key,
