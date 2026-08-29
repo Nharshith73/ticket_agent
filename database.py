@@ -44,111 +44,111 @@ def init_db() -> None:
                 except Exception:
                     pass
             conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT NOT NULL,
-                message TEXT NOT NULL,
-                level TEXT NOT NULL CHECK(level IN ('info', 'warning', 'error'))
+                """
+                CREATE TABLE IF NOT EXISTS logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    level TEXT NOT NULL CHECK(level IN ('info', 'warning', 'error'))
+                )
+                """
             )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS review_queue (
-                id TEXT PRIMARY KEY,
-                thread_id TEXT NOT NULL UNIQUE,
-                raw_text TEXT NOT NULL,
-                source_tag TEXT NOT NULL,
-                summary TEXT NOT NULL,
-                category TEXT NOT NULL,
-                urgency TEXT NOT NULL,
-                confidence INTEGER NOT NULL CHECK(confidence BETWEEN 0 AND 100),
-                due_date TEXT,
-                suggested_assignee TEXT,
-                status TEXT NOT NULL DEFAULT 'pending'
-                    CHECK(status IN ('pending', 'approved', 'rejected')),
-                created_at TEXT NOT NULL
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS review_queue (
+                    id TEXT PRIMARY KEY,
+                    thread_id TEXT NOT NULL UNIQUE,
+                    raw_text TEXT NOT NULL,
+                    source_tag TEXT NOT NULL,
+                    summary TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    urgency TEXT NOT NULL,
+                    confidence INTEGER NOT NULL CHECK(confidence BETWEEN 0 AND 100),
+                    due_date TEXT,
+                    suggested_assignee TEXT,
+                    status TEXT NOT NULL DEFAULT 'pending'
+                        CHECK(status IN ('pending', 'approved', 'rejected')),
+                    created_at TEXT NOT NULL
+                )
+                """
             )
-            """
-        )
-        conn.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS idx_review_queue_thread_id ON review_queue(thread_id)"
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS judge_verdicts (
-                ticket_id TEXT PRIMARY KEY,
-                score INTEGER NOT NULL CHECK(score BETWEEN 0 AND 100),
-                reasoning TEXT NOT NULL,
-                flags TEXT NOT NULL,
-                was_human_approved INTEGER NOT NULL,
-                decision_snapshot TEXT NOT NULL,
-                created_at TEXT NOT NULL
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_review_queue_thread_id ON review_queue(thread_id)"
             )
-            """
-        )
-        for col in ("due_date", "suggested_assignee"):
-            try:
-                conn.execute(f"ALTER TABLE review_queue ADD COLUMN {col} TEXT")
-            except sqlite3.OperationalError:
-                pass
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS team_members (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                email TEXT NOT NULL UNIQUE,
-                primary_category TEXT NOT NULL,
-                jira_account_id TEXT NOT NULL,
-                created_at TEXT NOT NULL
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS judge_verdicts (
+                    ticket_id TEXT PRIMARY KEY,
+                    score INTEGER NOT NULL CHECK(score BETWEEN 0 AND 100),
+                    reasoning TEXT NOT NULL,
+                    flags TEXT NOT NULL,
+                    was_human_approved INTEGER NOT NULL,
+                    decision_snapshot TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+                """
             )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS member_availability (
-                id TEXT PRIMARY KEY,
-                member_email TEXT NOT NULL UNIQUE,
-                status TEXT NOT NULL CHECK(status IN ('available', 'ooo', 'vacation')),
-                start_date TEXT,
-                end_date TEXT,
-                notes TEXT
+            for col in ("due_date", "suggested_assignee"):
+                try:
+                    conn.execute(f"ALTER TABLE review_queue ADD COLUMN {col} TEXT")
+                except sqlite3.OperationalError:
+                    pass
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS team_members (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    email TEXT NOT NULL UNIQUE,
+                    primary_category TEXT NOT NULL,
+                    jira_account_id TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+                """
             )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS jira_config (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                jira_url TEXT NOT NULL,
-                project_key TEXT NOT NULL,
-                user_email TEXT NOT NULL,
-                api_token TEXT NOT NULL,
-                updated_at TEXT NOT NULL
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS member_availability (
+                    id TEXT PRIMARY KEY,
+                    member_email TEXT NOT NULL UNIQUE,
+                    status TEXT NOT NULL CHECK(status IN ('available', 'ooo', 'vacation')),
+                    start_date TEXT,
+                    end_date TEXT,
+                    notes TEXT
+                )
+                """
             )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS user_sessions (
-                session_id TEXT PRIMARY KEY,
-                user_email TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                expires_at TEXT NOT NULL
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS jira_config (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    jira_url TEXT NOT NULL,
+                    project_key TEXT NOT NULL,
+                    user_email TEXT NOT NULL,
+                    api_token TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
             )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS users (
-                id TEXT PRIMARY KEY,
-                username TEXT NOT NULL UNIQUE,
-                password_hash TEXT NOT NULL,
-                created_at TEXT NOT NULL
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS user_sessions (
+                    session_id TEXT PRIMARY KEY,
+                    user_email TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL
+                )
+                """
             )
-            """
-        )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS users (
+                    id TEXT PRIMARY KEY,
+                    username TEXT NOT NULL UNIQUE,
+                    password_hash TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
     except Exception as e:
         print(f"[db warning] Could not initialize database on startup: {e}")
 

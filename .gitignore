@@ -15,6 +15,7 @@ __pycache__/
 *.db
 *.db-journal
 *.db-wal
+*.db-shm
 
 # Vercel Build Artifacts
 .vercel/

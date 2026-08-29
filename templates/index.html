@@ -1198,6 +1198,22 @@
       interpretForOutcomes(entry.message);
     }
 
+    async function loadHistoricalLogs() {
+      try {
+        const res = await fetch('/api/logs');
+        if (res.ok) {
+          const historicalLogs = await res.json();
+          if (historicalLogs && historicalLogs.length > 0) {
+            logs.replaceChildren();
+            loggedCount = 0;
+            historicalLogs.forEach(entry => addLog(entry));
+          }
+        }
+      } catch (err) {}
+    }
+
+    loadHistoricalLogs();
+
     const eventSource = new EventSource('/stream/logs');
     eventSource.onopen = () => { logStatus.textContent = 'Connected'; connDot.className = 'conn-dot on'; };
     eventSource.onerror = () => { logStatus.textContent = 'Reconnecting…'; connDot.className = 'conn-dot retry'; };
