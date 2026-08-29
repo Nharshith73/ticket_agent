@@ -24,12 +24,12 @@ class JiraClient:
             self.jira_url = db_config.get("jira_url", "").strip().rstrip("/")
             self.user_email = db_config.get("user_email", "").strip()
             self.api_token = db_config.get("api_token", "").strip()
-            self.project_key = db_config.get("project_key", "FA").strip()
+            self.project_key = db_config.get("project_key", "FD").strip()
         else:
             self.jira_url = os.getenv("JIRA_URL", "").strip().rstrip("/")
             self.user_email = os.getenv("JIRA_USER_EMAIL", "").strip()
             self.api_token = os.getenv("JIRA_API_TOKEN", "").strip()
-            self.project_key = os.getenv("JIRA_PROJECT_KEY", "FA").strip()
+            self.project_key = os.getenv("JIRA_PROJECT_KEY", "FD").strip()
 
         self.is_configured = bool(self.jira_url and self.user_email and self.api_token and "example.com" not in self.user_email and "yourdomain.com" not in self.user_email)
         self.my_account_id = None
