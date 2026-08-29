@@ -1,5 +1,6 @@
 """SQLite helpers for dashboard data and durable LangGraph checkpoints."""
 
+import base64
 import json
 import os
 import sqlite3
@@ -149,6 +150,19 @@ def init_db() -> None:
                 )
                 """
             )
+            # Auto-seed default accounts on database initialization (for Vercel cold starts)
+            for default_email, default_pass in [
+                ("nadellaharshith4@gmail.com", "password123"),
+                ("demouser@example.com", "DemoPass123!"),
+            ]:
+                row = conn.execute("SELECT id FROM users WHERE username = ?", (default_email,)).fetchone()
+                if not row:
+                    uid = str(uuid.uuid4())
+                    salt = secrets.token_hex(16)
+                    pw_hash = hashlib.pbkdf2_hmac('sha256', default_pass.encode('utf-8'), salt.encode('utf-8'), 100000).hex()
+                    phash_str = f"{salt}${pw_hash}"
+                    cat = datetime.now(timezone.utc).isoformat()
+                    conn.execute("INSERT INTO users (id, username, password_hash, created_at) VALUES (?, ?, ?, ?)", (uid, default_email, phash_str, cat))
     except Exception as e:
         print(f"[db warning] Could not initialize database on startup: {e}")
 
@@ -499,9 +513,34 @@ def save_jira_config(
 
 # --- Session Management Helpers ---
 
+def _encode_session_token(user_email: str) -> str:
+    """Encode user email into a self-describing session token for serverless compatibility."""
+    clean_email = user_email.strip().lower()
+    encoded_email = base64.urlsafe_b64encode(clean_email.encode('utf-8')).decode('utf-8').rstrip('=')
+    rand_part = uuid.uuid4().hex[:12]
+    return f"sess_{rand_part}_{encoded_email}"
+
+
+def _decode_session_token(session_id: str) -> str | None:
+    """Decode user email from a self-describing session token."""
+    if not session_id or not isinstance(session_id, str) or not session_id.startswith("sess_"):
+        return None
+    parts = session_id.split("_", 2)
+    if len(parts) != 3:
+        return None
+    encoded_email = parts[2]
+    padded = encoded_email + "=" * (-len(encoded_email) % 4)
+    try:
+        email = base64.urlsafe_b64decode(padded.encode('utf-8')).decode('utf-8')
+        return email.strip().lower()
+    except Exception:
+        return None
+
+
 def create_session(user_email: str, duration_days: int = 30) -> str:
     """Create a persistent user session in SQLite database and return session ID."""
-    session_id = str(uuid.uuid4())
+    clean_email = user_email.strip().lower()
+    session_id = _encode_session_token(clean_email)
     now = datetime.now(timezone.utc)
     created_at = now.isoformat()
     expires_at = (now + timedelta(days=duration_days)).isoformat()
@@ -511,30 +550,55 @@ def create_session(user_email: str, duration_days: int = 30) -> str:
             INSERT INTO user_sessions (session_id, user_email, created_at, expires_at)
             VALUES (?, ?, ?, ?)
             """,
-            (session_id, user_email.strip().lower(), created_at, expires_at),
+            (session_id, clean_email, created_at, expires_at),
         )
     return session_id
 
 
 def get_session(session_id: str) -> dict | None:
-    """Fetch valid, non-expired user session by session ID."""
+    """Fetch valid user session by session ID with serverless self-healing fallback."""
     if not session_id:
         return None
     with _connect() as conn:
         row = conn.execute(
             "SELECT * FROM user_sessions WHERE session_id = ?", (session_id,)
         ).fetchone()
-    if not row:
-        return None
-    data = dict(row)
-    try:
-        exp = datetime.fromisoformat(data["expires_at"])
-        if datetime.now(timezone.utc) > exp:
-            delete_session(session_id)
-            return None
-    except Exception:
-        pass
-    return data
+    if row:
+        data = dict(row)
+        try:
+            exp = datetime.fromisoformat(data["expires_at"])
+            if datetime.now(timezone.utc) > exp:
+                delete_session(session_id)
+                return None
+        except Exception:
+            pass
+        return data
+
+    # Fallback for serverless Vercel cold-starts: decode self-describing token and self-heal session
+    decoded_email = _decode_session_token(session_id)
+    if decoded_email:
+        now = datetime.now(timezone.utc)
+        created_at = now.isoformat()
+        expires_at = (now + timedelta(days=30)).isoformat()
+        try:
+            with _connect() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO user_sessions (session_id, user_email, created_at, expires_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(session_id) DO NOTHING
+                    """,
+                    (session_id, decoded_email, created_at, expires_at),
+                )
+        except Exception:
+            pass
+        return {
+            "session_id": session_id,
+            "user_email": decoded_email,
+            "created_at": created_at,
+            "expires_at": expires_at,
+        }
+    return None
 
 
 def delete_session(session_id: str) -> None:
