@@ -343,16 +343,26 @@ def create_ticket_node(state: TextState) -> dict:
     category = state.get("category", "other")
     urgency = state.get("urgency", "low")
     due_date = state.get("due_date")
+
+    if not jira_client.is_configured:
+        err_msg = "Jira Workspace Connection is Not Configured. Please configure valid Jira URL, User Email, and API Token in Admin Settings."
+        emit_log(f"[create_ticket] FAILED: {err_msg}", "error")
+        raise RuntimeError(err_msg)
+
     emit_log(f"[create_ticket] Creating JIRA ticket: '{summary}' [{category}] [{urgency}] [due: {due_date}]")
-    new_key = jira_client.create_ticket(
-        summary=summary,
-        description=description,
-        category=category,
-        urgency=urgency,
-        due_date=due_date,
-    )
-    emit_log(f"[create_ticket] Ticket created: {new_key}")
-    return {"new_ticket_key": new_key}
+    try:
+        new_key = jira_client.create_ticket(
+            summary=summary,
+            description=description,
+            category=category,
+            urgency=urgency,
+            due_date=due_date,
+        )
+        emit_log(f"[create_ticket] Ticket created successfully: {new_key}")
+        return {"new_ticket_key": new_key}
+    except Exception as exc:
+        emit_log(f"[create_ticket] Ticket creation failed: {exc}", "error")
+        raise
 
 
 def route_assignee_node(state: TextState) -> dict:

@@ -93,9 +93,7 @@ class JiraClient:
         """Create a new JIRA ticket using Atlassian Document Format (ADF)"""
         self.reload()
         if not self.is_configured:
-            fake_key = f"{self.project_key}-101"
-            print(f"[stub] Would create JIRA ticket: key={fake_key}, summary='{summary}', category={category}, urgency={urgency}, due_date={due_date}")
-            return fake_key
+            raise RuntimeError("Jira Workspace Connection is Not Configured. Please save valid Jira URL, User Email, and API Token in Admin Settings.")
 
         url = f"{self.jira_url}/rest/api/3/issue"
         fields_data = {
@@ -131,11 +129,15 @@ class JiraClient:
                 print(f"[jira] Successfully created JIRA ticket: {ticket_key}")
                 return ticket_key
             else:
-                print(f"[jira error] Failed to create ticket. Status {response.status_code}: {response.text}")
-                return f"{self.project_key}-FALLBACK"
+                err_msg = f"Failed to create Jira ticket. Status {response.status_code}: {response.text}"
+                print(f"[jira error] {err_msg}")
+                raise RuntimeError(err_msg)
         except Exception as e:
-            print(f"[jira error] Exception creating ticket: {e}")
-            return f"{self.project_key}-FALLBACK"
+            if isinstance(e, RuntimeError):
+                raise
+            err_msg = f"Exception connecting to Jira API: {e}"
+            print(f"[jira error] {err_msg}")
+            raise RuntimeError(err_msg) from e
 
     def update_assignee(self, ticket_key: str, assignee: str) -> bool:
         """Assign JIRA ticket to account ID / user"""
