@@ -202,9 +202,12 @@
 
   async function loadJiraConfig() {
     try {
+      console.log('[admin] Fetching Jira config from backend...');
       const res = await fetch('/api/jira-config');
       if (!res.ok) return;
       const data = await res.json();
+      console.log('[admin] Received Jira config:', data);
+
       if (data.jira_url) document.getElementById('jira_url').value = data.jira_url;
       if (data.project_key) document.getElementById('project_key').value = data.project_key;
       if (data.user_email) document.getElementById('user_email').value = data.user_email;
@@ -213,11 +216,15 @@
       if (data.is_configured && data.my_account_id) {
         jiraStatusBadge.className = 'badge ok';
         jiraStatusBadge.textContent = `🟢 Connected (${data.project_key})`;
+      } else if (data.jira_url && data.user_email && data.user_email !== 'dev@example.com') {
+        jiraStatusBadge.className = 'badge ooo';
+        jiraStatusBadge.textContent = `🟡 Saved (${data.project_key || 'Configured'})`;
       } else {
         jiraStatusBadge.className = 'badge err';
         jiraStatusBadge.textContent = '🔴 Not Configured';
       }
     } catch (err) {
+      console.error('[admin error] Failed to load Jira config:', err);
       jiraStatusBadge.className = 'badge err';
       jiraStatusBadge.textContent = '🔴 Error';
     }
@@ -262,13 +269,16 @@
   });
 
   async function loadTeam() {
+    console.log('[admin] Fetching team members roster from GET /api/team...');
     rosterBody.innerHTML = `<tr><td colspan="5" class="empty" style="color:var(--muted);">⏳ Loading team members & active workloads…</td></tr>`;
     try {
       const res = await fetch('/api/team');
       if (!res.ok) throw new Error('Failed to load team roster.');
       const members = await res.json();
+      console.log('[admin] Loaded team roster from backend:', members);
       renderRoster(members);
     } catch (err) {
+      console.error('[admin error] Failed to load team roster:', err);
       rosterBody.innerHTML = `<tr><td colspan="5" class="empty" style="color:var(--red-text);">⚠️ ${escapeHtml(err.message)}</td></tr>`;
     }
   }
