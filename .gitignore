@@ -19,3 +19,8 @@ __pycache__/
 
 # Vercel Build Artifacts
 .vercel/
+
+# Temporary & Rendered Media Files
+tmp_frames/
+*.mp4
+
