@@ -1089,24 +1089,69 @@
     }
 
     // ---------- Recent outcomes ----------
-    function pushOutcome(kind, keyText, summary) {
+    function pushOutcome(kind, keyText, summary, rawKey = '') {
+      const ticketId = rawKey || keyText.replace(/^[✓↺✕⚡]\s*/, '').trim();
+      const existingCard = ticketId ? outcomes.querySelector(`.outcome-card[data-ticket-id="${ticketId}"]`) : null;
+
+      if (existingCard) {
+        const keyEl = existingCard.querySelector('.outcome-key');
+        const summaryEl = existingCard.querySelector('.outcome-summary');
+        if (keyEl && keyText) {
+          keyEl.textContent = keyText;
+          if (kind === 'judged' || kind === 'created') {
+            keyEl.className = 'outcome-key created';
+          }
+        }
+        if (summaryEl && summary) {
+          const currentSummary = summaryEl.textContent || '';
+          if (summary.startsWith('Score ') && currentSummary.startsWith('Routed to ') && !currentSummary.includes('Score ')) {
+            summaryEl.textContent = `${currentSummary} • ${summary}`;
+          } else if (summary.startsWith('Routed to ') && currentSummary.startsWith('Score ') && !currentSummary.includes('Routed to ')) {
+            summaryEl.textContent = `${summary} • ${currentSummary}`;
+          } else {
+            summaryEl.textContent = summary;
+          }
+        }
+        if ((kind === 'judged' || kind === 'created') && ticketId) {
+          if (!existingCard.querySelector('.ai-review-btn')) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'ai-review-btn';
+            btn.onclick = () => openJudgeModal(ticketId);
+            btn.title = 'AI Routing Audit';
+            btn.textContent = '⚡ AI Review';
+            existingCard.append(btn);
+          }
+        }
+        return;
+      }
+
       const card = document.createElement('div');
       card.className = 'outcome-card';
-      const cls = kind === 'created' ? 'created' : kind === 'dup' ? 'dup' : 'rejected';
+      if (ticketId) card.setAttribute('data-ticket-id', ticketId);
+      const cls = (kind === 'created' || kind === 'judged') ? 'created' : kind === 'dup' ? 'dup' : 'rejected';
 
-      const rawKey = keyText.replace(/^[✓↺✕]\s*/, '').trim();
-      const isTicket = kind === 'created' && rawKey.length > 0;
-      const actionBtnHtml = isTicket
-        ? `<button type="button" class="ai-review-btn" onclick="openJudgeModal('${rawKey}')" title="AI Routing Audit">⚡ AI Review</button>`
-        : '';
+      const contentDiv = document.createElement('div');
+      const keyDiv = document.createElement('div');
+      keyDiv.className = `outcome-key ${cls}`;
+      keyDiv.textContent = keyText;
+      const summaryDiv = document.createElement('div');
+      summaryDiv.className = 'outcome-summary';
+      summaryDiv.textContent = summary || '';
+      contentDiv.append(keyDiv, summaryDiv);
+      card.append(contentDiv);
 
-      card.innerHTML = `
-      <div>
-        <div class="outcome-key ${cls}">${keyText}</div>
-        <div class="outcome-summary">${summary || ''}</div>
-      </div>
-      ${actionBtnHtml}
-    `;
+      const isTicket = (kind === 'created' || kind === 'judged') && ticketId.length > 0;
+      if (isTicket) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'ai-review-btn';
+        btn.onclick = () => openJudgeModal(ticketId);
+        btn.title = 'AI Routing Audit';
+        btn.textContent = '⚡ AI Review';
+        card.append(btn);
+      }
+
       outcomes.prepend(card);
       while (outcomes.children.length > 8) outcomes.removeChild(outcomes.lastChild);
     }
@@ -1174,12 +1219,28 @@
     function interpretForOutcomes(message) {
       if (message.startsWith('[create_ticket] Ticket created:')) {
         const key = message.split('Ticket created:')[1]?.trim();
-        pushOutcome('created', key ? `✓ ${key}` : 'Ticket created', 'New ticket created');
+        pushOutcome('created', key ? `✓ ${key}` : 'Ticket created', 'New ticket created', key);
       } else if (message.startsWith('[log_duplicate]')) {
         const m = message.match(/Duplicate ticket (\S+)/);
-        pushOutcome('dup', m ? `↺ ${m[1]}` : 'Duplicate', 'Matched an existing ticket');
+        pushOutcome('dup', m ? `↺ ${m[1]}` : 'Duplicate', 'Matched an existing ticket', m ? m[1] : '');
       } else if (message.includes('Human rejected the extraction')) {
         pushOutcome('rejected', '✕ Rejected', 'Discarded after human review');
+      } else if (message.startsWith('[update_ticket] Assigning')) {
+        const m = message.match(/\[update_ticket\] Assigning (\S+) to (.+)\./);
+        if (m) {
+          const ticketId = m[1].trim();
+          const assignee = m[2].trim();
+          pushOutcome('created', `✓ ${ticketId}`, `Routed to ${assignee}`, ticketId);
+        }
+      } else if (message.startsWith('[judge] Verdict saved for')) {
+        const m = message.match(/\[judge\] Verdict saved for (\S+?): Score (\d+\/100)\. Flags: (\d+) item\(s\)/);
+        if (m) {
+          const ticketId = m[1].replace(/:$/, '').trim();
+          const score = m[2];
+          const flagsCount = m[3];
+          const flagsText = flagsCount === '0' ? 'No flags' : `${flagsCount} flag(s)`;
+          pushOutcome('judged', `⚡ ${ticketId}`, `Score ${score} • ${flagsText}`, ticketId);
+        }
       }
     }
 

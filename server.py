@@ -12,10 +12,6 @@ from pydantic import BaseModel, Field
 
 from database import (
     add_team_member,
-    authenticate_user,
-    create_session,
-    create_user,
-    delete_session,
     delete_team_member,
     get_all_team_members,
     get_jira_config,
@@ -25,10 +21,7 @@ from database import (
     get_recent_logs,
     get_review_by_id,
     get_review_by_thread_id,
-    get_session,
-    get_user_by_username,
     reset_review_status_to_pending,
-    save_jira_config,
     set_member_availability,
     set_review_status_if_pending,
 )
@@ -36,10 +29,14 @@ from graph import app as graph_app
 from log_utils import emit_log, stream_log_events
 from nodes import jira_client as jira_service
 
-LOGIN_TEMPLATE_PATH = Path(__file__).with_name("templates") / "login.html"
 ADMIN_TEMPLATE_PATH = Path(__file__).with_name("templates") / "admin.html"
 TEMPLATE_PATH = Path(__file__).with_name("templates") / "index.html"
 app = FastAPI(title="Support Ticket Triage Dashboard")
+
+
+@app.on_event("startup")
+async def startup_event():
+    jira_service.validate_startup()
 
 
 from typing import Optional
@@ -77,103 +74,20 @@ def _initial_state(raw_text: str, source_tag: str, thread_id: str) -> dict:
     }
 
 
-def _get_current_session(request: Request) -> Optional[dict]:
-    token = request.cookies.get("session_token")
-    if not token:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:].strip()
-    return get_session(token) if token else None
-
-
-class LoginRequest(BaseModel):
-    username: str = Field(min_length=1)
-    password: str = Field(min_length=1)
-
-
-class RegisterRequest(BaseModel):
-    username: str = Field(min_length=1)
-    password: str = Field(min_length=4)
-    confirm_password: str = Field(min_length=4)
-
-
-@app.get("/login", include_in_schema=False)
-async def login_page(request: Request):
-    if not LOGIN_TEMPLATE_PATH.exists():
-        raise HTTPException(status_code=404, detail="Login template not found")
-    sess = _get_current_session(request)
-    if sess:
-        return RedirectResponse(url="/admin", status_code=status.HTTP_302_FOUND)
-    return FileResponse(LOGIN_TEMPLATE_PATH, media_type="text/html")
-
-
 @app.get("/api/auth/status")
-async def auth_status(request: Request) -> dict:
-    sess = _get_current_session(request)
+async def auth_status() -> dict:
     jira_service.reload()
-    config = get_jira_config() or {}
-    user_email = sess["user_email"] if sess else config.get("user_email")
     return {
-        "authenticated": bool(sess),
-        "user_email": user_email,
+        "authenticated": True,
+        "user_email": jira_service.user_email,
         "is_configured": jira_service.is_configured,
         "jira_url": jira_service.jira_url,
         "project_key": jira_service.project_key,
     }
 
 
-@app.post("/api/register")
-async def register_endpoint(req: RegisterRequest, response: Response) -> dict:
-    if req.password != req.confirm_password:
-        raise HTTPException(status_code=422, detail="Passwords do not match")
-    try:
-        user = create_user(req.username, req.password)
-    except ValueError as val_err:
-        raise HTTPException(status_code=400, detail=str(val_err)) from val_err
-
-    session_id = create_session(user["username"])
-    response.set_cookie(key="session_token", value=session_id, httponly=True, max_age=30*86400, samesite="lax")
-    emit_log(f"[auth] Created account for user {user['username']}.")
-    return {
-        "success": True,
-        "message": f"Account created successfully!",
-        "user_email": user["username"],
-        "redirect": "/admin",
-    }
-
-
-@app.post("/api/login")
-async def login_endpoint(req: LoginRequest, response: Response) -> dict:
-    user = authenticate_user(req.username, req.password)
-    if not user:
-        emit_log(f"[auth warning] Failed login attempt for '{req.username}'", "warning")
-        raise HTTPException(status_code=401, detail="Invalid email/username or password")
-
-    session_id = create_session(user["username"])
-    response.set_cookie(key="session_token", value=session_id, httponly=True, max_age=30*86400, samesite="lax")
-    emit_log(f"[auth] User {user['username']} logged in successfully.")
-    return {
-        "success": True,
-        "message": f"Welcome back!",
-        "user_email": user["username"],
-        "redirect": "/admin",
-    }
-
-
-@app.post("/api/logout")
-async def logout_endpoint(request: Request, response: Response) -> dict:
-    sess_id = request.cookies.get("session_token")
-    if sess_id:
-        delete_session(sess_id)
-    response.delete_cookie(key="session_token")
-    return {"success": True, "message": "Logged out successfully"}
-
-
 @app.get("/", include_in_schema=False)
-async def dashboard(request: Request):
-    sess = _get_current_session(request)
-    if not sess:
-        return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
+async def dashboard():
     return FileResponse(TEMPLATE_PATH, media_type="text/html")
 
 
@@ -308,12 +222,9 @@ async def ingest(request: IngestRequest) -> dict:
 
 
 @app.get("/admin", include_in_schema=False)
-async def admin_dashboard(request: Request):
-    sess = _get_current_session(request)
-    if not sess:
-        return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
+async def admin_dashboard():
     if not ADMIN_TEMPLATE_PATH.exists():
-        raise HTTPException(status_code=status.HTTP_444_NOT_FOUND if hasattr(status, 'HTTP_444_NOT_FOUND') else 404, detail="Admin template not found")
+        raise HTTPException(status_code=404, detail="Admin template not found")
     return FileResponse(ADMIN_TEMPLATE_PATH, media_type="text/html")
 
 
@@ -332,61 +243,18 @@ class AvailabilitySetRequest(BaseModel):
     notes: Optional[str] = None
 
 
-class JiraConfigRequest(BaseModel):
-    jira_url: str = Field(min_length=5)
-    project_key: str = Field(min_length=1)
-    user_email: str = Field(min_length=3)
-    api_token: str = Field(min_length=5)
-
-
 @app.get("/api/jira-config")
 @app.get("/jira/status")
 async def fetch_jira_config() -> dict:
-    """Return current active Jira configuration status."""
+    """Return current active Jira configuration status read from .env."""
     jira_service.reload()
-    config = get_jira_config() or {}
-    masked_token = ""
-    if config.get("api_token"):
-        tok = config["api_token"]
-        masked_token = tok[:6] + "..." + tok[-4:] if len(tok) > 10 else "***"
-    
     return {
         "is_configured": jira_service.is_configured and bool(jira_service.my_account_id),
         "my_account_id": jira_service.my_account_id,
         "jira_url": jira_service.jira_url,
         "project_key": jira_service.project_key,
         "user_email": jira_service.user_email,
-        "api_token_masked": masked_token,
-    }
-
-
-@app.post("/api/jira-config")
-@app.post("/jira/config")
-async def update_jira_config(req: JiraConfigRequest) -> dict:
-    """Save new Jira credentials dynamically and re-test connection."""
-    save_jira_config(
-        jira_url=req.jira_url,
-        project_key=req.project_key,
-        user_email=req.user_email,
-        api_token=req.api_token,
-    )
-    jira_service.reload()
-    if not jira_service.is_configured or not jira_service.my_account_id:
-        emit_log(f"[admin warning] Failed to authenticate with Jira using email '{req.user_email}' at '{req.jira_url}'", "warning")
-        return {
-            "success": False,
-            "message": "Saved credentials to database, but could not authenticate with Jira Cloud API. Please verify URL, email, and API token.",
-            "is_configured": False,
-            "my_account_id": None,
-        }
-
-    emit_log(f"[admin] Dynamic Jira connection updated! Connected as Account ID: {jira_service.my_account_id} for project '{req.project_key}'")
-    return {
-        "success": True,
-        "message": f"Successfully authenticated with Jira Cloud! Connected as Account ID: {jira_service.my_account_id}",
-        "is_configured": True,
-        "my_account_id": jira_service.my_account_id,
-        "project_key": req.project_key,
+        "api_token_masked": "***" if jira_service.api_token else "",
     }
 
 

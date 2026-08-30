@@ -1,4 +1,5 @@
 import os
+import sys
 import base64
 import requests
 from typing import Optional
@@ -13,23 +14,35 @@ class JiraClient:
         self.reload()
 
     def reload(self):
-        """Reload credentials dynamically from database or .env fallback."""
-        db_config = None
-        try:
-            db_config = get_jira_config()
-        except Exception:
-            pass
+        """Reload credentials strictly from process environment variables (.env), falling back to database if empty."""
+        load_dotenv(override=True)
+        env_url = os.getenv("JIRA_URL", "").strip().rstrip("/")
+        env_email = os.getenv("JIRA_USER_EMAIL", "").strip()
+        env_token = os.getenv("JIRA_API_TOKEN", "").strip()
+        env_project = os.getenv("JIRA_PROJECT_KEY", "").strip()
 
-        if db_config:
+        db_config = None
+        if not (env_url and env_email and env_token):
+            try:
+                db_config = get_jira_config()
+            except Exception:
+                pass
+
+        if env_url and env_email and env_token:
+            self.jira_url = env_url
+            self.user_email = env_email
+            self.api_token = env_token
+            self.project_key = env_project or "KAN"
+        elif db_config:
             self.jira_url = db_config.get("jira_url", "").strip().rstrip("/")
             self.user_email = db_config.get("user_email", "").strip()
             self.api_token = db_config.get("api_token", "").strip()
-            self.project_key = db_config.get("project_key", "FD").strip()
+            self.project_key = db_config.get("project_key", "KAN").strip()
         else:
-            self.jira_url = os.getenv("JIRA_URL", "").strip().rstrip("/")
-            self.user_email = os.getenv("JIRA_USER_EMAIL", "").strip()
-            self.api_token = os.getenv("JIRA_API_TOKEN", "").strip()
-            self.project_key = os.getenv("JIRA_PROJECT_KEY", "FD").strip()
+            self.jira_url = env_url
+            self.user_email = env_email
+            self.api_token = env_token
+            self.project_key = env_project or "KAN"
 
         self.is_configured = bool(self.jira_url and self.user_email and self.api_token and "example.com" not in self.user_email and "yourdomain.com" not in self.user_email)
         self.my_account_id = None
@@ -41,7 +54,6 @@ class JiraClient:
                 "Content-Type": "application/json",
                 "Accept": "application/json"
             }
-            # Resolve current user's account ID for smart fallback
             try:
                 res = requests.get(f"{self.jira_url}/rest/api/3/myself", headers=self.headers, timeout=5)
                 if res.status_code == 200:
@@ -50,6 +62,68 @@ class JiraClient:
                 pass
         else:
             self.headers = {}
+
+    def validate_startup(self) -> bool:
+        """Validate Jira and OpenRouter credentials once on process startup. Fail loudly with sys.exit(1) if invalid or missing."""
+        load_dotenv(override=True)
+        self.reload()
+
+        openrouter_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+
+        missing = []
+        if not openrouter_key: missing.append("OPENROUTER_API_KEY")
+        if not self.jira_url: missing.append("JIRA_URL")
+        if not self.user_email: missing.append("JIRA_USER_EMAIL")
+        if not self.api_token: missing.append("JIRA_API_TOKEN")
+        if not self.project_key: missing.append("JIRA_PROJECT_KEY")
+
+        is_openrouter_placeholder = "your_openrouter_api_key" in openrouter_key.lower() or "placeholder" in openrouter_key.lower()
+        is_jira_placeholder = "example.com" in self.user_email or "yourdomain.com" in self.user_email
+
+        if missing or is_openrouter_placeholder or is_jira_placeholder:
+            print("\n" + "=" * 70, file=sys.stderr)
+            print("FATAL ERROR: ENVIRONMENT CONFIGURATION MISSING OR INVALID IN .env", file=sys.stderr)
+            if missing:
+                print(f"Missing environment variables: {', '.join(missing)}", file=sys.stderr)
+            if is_openrouter_placeholder:
+                print("Placeholder OPENROUTER_API_KEY detected in .env.", file=sys.stderr)
+            if is_jira_placeholder:
+                print("Placeholder Jira credentials detected in .env.", file=sys.stderr)
+            print("Please configure OPENROUTER_API_KEY, JIRA_URL, JIRA_USER_EMAIL, JIRA_API_TOKEN, and JIRA_PROJECT_KEY in your local .env file.", file=sys.stderr)
+            print("=" * 70 + "\n", file=sys.stderr)
+            sys.exit(1)
+
+        auth_str = f"{self.user_email}:{self.api_token}"
+        b64_auth = base64.b64encode(auth_str.encode()).decode()
+        headers = {
+            "Authorization": f"Basic {b64_auth}",
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+
+        try:
+            res = requests.get(f"{self.jira_url}/rest/api/3/myself", headers=headers, timeout=10)
+            if res.status_code == 200:
+                user_data = res.json()
+                self.my_account_id = user_data.get("accountId")
+                self.is_configured = True
+                print(f"[JIRA STARTUP] Successfully authenticated as Jira Account ID '{self.my_account_id}' for project '{self.project_key}'")
+                return True
+            else:
+                print("\n" + "=" * 70, file=sys.stderr)
+                print(f"FATAL ERROR: JIRA API AUTHENTICATION FAILED (HTTP {res.status_code})", file=sys.stderr)
+                print(f"URL: {self.jira_url}/rest/api/3/myself", file=sys.stderr)
+                print(f"Response: {res.text}", file=sys.stderr)
+                print("Please verify JIRA_URL, JIRA_USER_EMAIL, and JIRA_API_TOKEN in your .env file.", file=sys.stderr)
+                print("=" * 70 + "\n", file=sys.stderr)
+                sys.exit(1)
+        except Exception as exc:
+            print("\n" + "=" * 70, file=sys.stderr)
+            print(f"FATAL ERROR: COULD NOT CONNECT TO JIRA API: {exc}", file=sys.stderr)
+            print("Please check network connectivity and your JIRA_URL setting.", file=sys.stderr)
+            print("=" * 70 + "\n", file=sys.stderr)
+            sys.exit(1)
+
 
     def search_duplicate(self, summary: str, category: str) -> Optional[str]:
         """Search JIRA for existing duplicate tickets"""
